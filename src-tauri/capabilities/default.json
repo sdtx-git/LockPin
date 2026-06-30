@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Permissões padrão do LockPin desktop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
+  ]
+}
