@@ -124,29 +124,37 @@ This separation means the vault file itself contains no credentials — an attac
 
 ## Getting Started
 
-### Prerequisites
+### Download (recommended)
+
+Pre-built Windows installers are available on the [Releases](https://github.com/sdtx-git/LockPin/releases) page.
+No build tools required — download the `.msi` or `.exe` and run it.
+
+### Build from source
+
+**Prerequisites**
 
 - [Node.js 18+](https://nodejs.org)
 - [Rust 1.80+](https://rustup.rs)
 - [Tauri CLI prerequisites for Windows](https://tauri.app/start/prerequisites/)
 
-### Development
-
 ```bash
-git clone https://github.com/YOUR_USERNAME/lockpin.git
-cd lockpin
+git clone https://github.com/sdtx-git/LockPin.git
+cd LockPin
 
 npm install
-npm run tauri:dev
-```
-
-### Production build
-
-```bash
 npm run tauri:build
 ```
 
 The installer is output to `src-tauri/target/release/bundle/`.
+
+### CI / Releases
+
+Pushing a tag triggers the GitHub Actions build pipeline, which compiles on a clean Windows runner and publishes the installer to GitHub Releases automatically:
+
+```bash
+git tag v3.0.1
+git push origin v3.0.1
+```
 
 ### Useful scripts
 
