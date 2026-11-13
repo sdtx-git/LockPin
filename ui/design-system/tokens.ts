@@ -1,39 +1,39 @@
-// ===== Cores – paleta sofisticada com dark mode nativo =====
+// ===== Cores – apontam para as variáveis de tema (global.css) =====
 export const colors = {
-  neutral0:  '#0a0a0a',
-  neutral1:  '#121212',
-  neutral2:  '#1a1a1a',
-  neutral3:  '#242424',
-  neutral4:  '#2e2e2e',
-  neutral5:  '#3a3a3a',
-  neutral6:  '#505050',
-  neutral7:  '#707070',
-  neutral8:  '#909090',
-  neutral9:  '#b0b0b0',
-  neutral10: '#d0d0d0',
-  neutral11: '#e8e8e8',
-  neutral12: '#ffffff',
+  neutral0:  'var(--canvas)',
+  neutral1:  'var(--canvas)',
+  neutral2:  'var(--surface)',
+  neutral3:  'var(--border)',
+  neutral4:  'var(--border-strong)',
+  neutral5:  'var(--text-4)',
+  neutral6:  'var(--text-3)',
+  neutral7:  'var(--text-3)',
+  neutral8:  'var(--text-2)',
+  neutral9:  'var(--text-2)',
+  neutral10: 'var(--text)',
+  neutral11: 'var(--text)',
+  neutral12: 'var(--text)',
 
-  primary:    '#4f98a3',
-  primaryDim: '#2a5c66',
-  primaryHover: '#3d7a84',
-  primaryActive: '#2d5c66',
+  primary:    'var(--accent)',
+  primaryDim: 'var(--accent-soft)',
+  primaryHover: 'var(--accent-hover)',
+  primaryActive: 'var(--accent-hover)',
 
-  error:      '#d163a7',
-  errorDim:   '#8a2f6a',
-  success:    '#6daa45',
-  successDim: '#4a7a2e',
-  warning:    '#fdab43',
-  warningDim: '#c47a20',
+  error:      'var(--danger)',
+  errorDim:   'var(--danger-soft)',
+  success:    'var(--success)',
+  successDim: 'var(--success-soft)',
+  warning:    'var(--warning)',
+  warningDim: 'var(--warning-soft)',
 
-  overlay50:  'rgba(10, 10, 10, 0.5)',
-  overlay70:  'rgba(10, 10, 10, 0.7)',
+  overlay50:  'var(--overlay)',
+  overlay70:  'var(--overlay)',
 } as const;
 
 // ===== Tipografia =====
 export const typography = {
-  fontFamily: 'Inter, -apple-system, system-ui, sans-serif',
-  fontFamilyMono: 'JetBrains Mono, Fira Code, monospace',
+  fontFamily: "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif",
+  fontFamilyMono: "'IBM Plex Mono', ui-monospace, Consolas, monospace",
 
   sizes: {
     xs:  '11px',
@@ -92,12 +92,12 @@ export const radii = {
 
 // ===== Sombras =====
 export const effects = {
-  shadowSm:  '0 1px 2px rgba(0, 0, 0, 0.3)',
-  shadowMd:  '0 4px 12px rgba(0, 0, 0, 0.4)',
-  shadowLg:  '0 8px 32px rgba(0, 0, 0, 0.5)',
-  shadowXl:  '0 16px 48px rgba(0, 0, 0, 0.6)',
-  glowPrimary: '0 0 16px rgba(79, 152, 163, 0.4)',
-  glowError: '0 0 16px rgba(209, 99, 167, 0.4)',
+  shadowSm:  '0 1px 2px rgba(0, 0, 0, 0.06)',
+  shadowMd:  'var(--shadow-pop)',
+  shadowLg:  'var(--shadow-pop)',
+  shadowXl:  'var(--shadow-pop)',
+  glowPrimary: 'none',
+  glowError: 'none',
 } as const;
 
 // ===== Transições =====
