@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { tokens } from '@ui/design-system/tokens';
+import { Button } from '@ui/components/atoms';
 import { PasswordGenerator } from '@ui/components/molecules';
 import { calculatePasswordStrength, strengthColor, strengthLabel } from '@shared/utils';
 import type { VaultItem, VaultItemType } from '@core/vault/types';
@@ -45,13 +46,13 @@ export function itemToForm(item: VaultItem): FormData {
 
 // ─── Type config ──────────────────────────────────────────────────────────────
 
-const TYPES: { key: VaultItemType; label: string; color: string }[] = [
-  { key: 'password', label: 'Senha',      color: '#4f98a3' },
-  { key: 'totp',     label: 'TOTP',       color: '#e87da0' },
-  { key: 'card',     label: 'Cartão',     color: '#fdab43' },
-  { key: 'note',     label: 'Nota',       color: '#9b7de8' },
-  { key: 'identity', label: 'Identidade', color: '#6daa45' },
-  { key: 'passkey',  label: 'Passkey',    color: '#63b3ff' },
+const TYPES: { key: VaultItemType; label: string }[] = [
+  { key: 'password', label: 'Senha' },
+  { key: 'totp',     label: 'Autenticador' },
+  { key: 'card',     label: 'Cartão' },
+  { key: 'note',     label: 'Nota' },
+  { key: 'identity', label: 'Identidade' },
+  { key: 'passkey',  label: 'Passkey' },
 ];
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -104,8 +105,6 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
 
   if (!open) return null;
 
-  const activeType = TYPES.find(t => t.key === form.type)!;
-
   return (
     <div
       role="dialog" aria-modal="true"
@@ -115,109 +114,47 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
         padding: '20px',
       }}
     >
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(4,4,8,0.85)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}
-      />
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--overlay)' }} />
 
-      {/* Panel */}
       <div
         style={{
           position: 'relative', zIndex: 1,
           width: '100%', maxWidth: 560,
           maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-          background: 'rgba(8,8,14,0.99)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 20,
-          boxShadow: `0 48px 96px rgba(0,0,0,0.75), 0 0 0 1px ${activeType.color}18, inset 0 1px 0 rgba(255,255,255,0.06)`,
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          boxShadow: 'var(--shadow-pop)',
           overflow: 'hidden',
-          animation: 'dialog-enter 0.22s cubic-bezier(0.16,1,0.3,1)',
+          animation: 'modal-in 0.16s ease-out',
         }}
         onKeyDown={handleKey}
       >
-        {/* Accent top border */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-          background: `linear-gradient(90deg, transparent, ${activeType.color}80, ${activeType.color}50, transparent)`,
-          transition: 'background 0.3s',
-        }} />
-
-        {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '20px 22px 0', flexShrink: 0,
+          padding: '14px 16px 14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
         }}>
-          <div>
-            <h2 style={{
-              fontFamily: tokens.typography.fontFamily, fontSize: '17px', fontWeight: 700,
-              color: tokens.colors.neutral12, margin: 0, lineHeight: 1,
-            }}>
-              {isEdit ? 'Editar Item' : 'Novo Item'}
-            </h2>
-            {isEdit && (
-              <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral6, marginTop: 4 }}>
-                {editingItem.title}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onClose} aria-label="Fechar"
-            style={{
-              width: 30, height: 30, borderRadius: 8, border: 'none',
-              background: 'rgba(255,255,255,0.06)', color: tokens.colors.neutral6,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.13s',
-            }}
-            onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'rgba(255,255,255,0.12)'; b.style.color = '#fff'; }}
-            onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.background = 'rgba(255,255,255,0.06)'; b.style.color = tokens.colors.neutral6; }}
-          >
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}><path d="M6 18L18 6M6 6l12 12"/></svg>
+          <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+            {isEdit ? `Editar "${editingItem.title}"` : 'Novo item'}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Fechar" className="icon-btn">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
 
         {/* Type picker */}
-        <div style={{ padding: '16px 22px 0', flexShrink: 0 }}>
-          <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Tipo
-          </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {TYPES.map(t => {
-              const active = form.type === t.key;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => set('type', t.key)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 7,
-                    padding: '7px 12px', borderRadius: 10, cursor: 'pointer',
-                    border: `1px solid ${active ? t.color + '50' : 'rgba(255,255,255,0.07)'}`,
-                    background: active ? `${t.color}14` : 'rgba(255,255,255,0.03)',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <TypeIcon type={t.key} size={14} color={active ? t.color : tokens.colors.neutral6} />
-                  <span style={{
-                    fontFamily: tokens.typography.fontFamily, fontSize: '12px', fontWeight: active ? 600 : 400,
-                    color: active ? t.color : tokens.colors.neutral7,
-                    transition: 'color 0.13s',
-                  }}>
-                    {t.label}
-                  </span>
-                </button>
-              );
-            })}
+        <div style={{ padding: '16px 20px 0', flexShrink: 0 }}>
+          <div className="segmented" role="group" aria-label="Tipo de item">
+            {TYPES.map(t => (
+              <button key={t.key} type="button" aria-pressed={form.type === t.key} onClick={() => set('type', t.key)}>
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Form body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
           <FormBody
             form={form}
             set={set}
@@ -230,41 +167,23 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
           />
         </div>
 
-        {/* Error */}
         {error && (
-          <div style={{ padding: '0 22px 8px' }}>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: '#e87da0', background: 'rgba(232,125,160,0.08)', border: '1px solid rgba(232,125,160,0.2)', borderRadius: 8, padding: '8px 12px', margin: 0 }}>
-              {error}
-            </p>
+          <div style={{ padding: '0 20px 10px' }}>
+            <p className="note note--danger">{error}</p>
           </div>
         )}
 
-        {/* Footer */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 22px', borderTop: '1px solid rgba(255,255,255,0.05)',
-          flexShrink: 0,
+          padding: '12px 20px', borderTop: '1px solid var(--border)', flexShrink: 0,
         }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}>
-            <FavoriteToggle on={form.favorite} onChange={v => set('favorite', v)} />
-            <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral7 }}>
-              Favorito
-            </span>
-          </label>
-
+          <FavoriteToggle on={form.favorite} onChange={v => set('favorite', v)} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <GhostBtn onClick={onClose}>Cancelar</GhostBtn>
-            <PrimaryBtn onClick={onSave}>{isEdit ? 'Salvar' : 'Criar'}</PrimaryBtn>
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button onClick={onSave}>{isEdit ? 'Salvar alterações' : 'Salvar item'}</Button>
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes dialog-enter {
-          from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-      `}</style>
     </div>
   );
 };
@@ -317,14 +236,13 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
                 value={form.password}
                 onChange={v => set('password', v)}
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Senha mestra"
                 style={{ paddingRight: 72 }}
               />
-              <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 4 }}>
+              <div style={{ position: 'absolute', right: 5, top: 5, display: 'flex', gap: 2 }}>
                 <SmallIconBtn label={showPassword ? 'Ocultar' : 'Mostrar'} onClick={onTogglePassword}>
                   {showPassword
-                    ? <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
-                    : <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx={12} cy={12} r={3}/></svg>
+                    ? <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+                    : <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx={12} cy={12} r={3}/></svg>
                   }
                 </SmallIconBtn>
                 <SmallIconBtn
@@ -332,7 +250,7 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
                   onClick={onToggleGenerator}
                   active={showGenerator}
                 >
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
                 </SmallIconBtn>
               </div>
             </div>
@@ -340,7 +258,7 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
             {/* Strength */}
             {form.password && strength && (
               <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ flex: 1, height: 3, background: 'var(--fill-hover)', borderRadius: 2, overflow: 'hidden' }}>
                   <div style={{
                     height: '100%',
                     width: { weak: '25%', fair: '50%', strong: '75%', maximum: '100%' }[strength],
@@ -348,7 +266,7 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
                     borderRadius: 2, transition: 'width 0.3s, background 0.3s',
                   }} />
                 </div>
-                <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: strengthColor(strength), flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-2)', flexShrink: 0 }}>
                   {strengthLabel(strength)}
                 </span>
               </div>
@@ -357,12 +275,7 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
 
           {/* Inline generator */}
           {showGenerator && (
-            <div style={{
-              padding: 16, borderRadius: 12,
-              background: 'rgba(79,152,163,0.05)',
-              border: '1px solid rgba(79,152,163,0.15)',
-              animation: 'dialog-enter 0.18s ease',
-            }}>
+            <div style={{ padding: 14, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               <PasswordGenerator
                 compact
                 onPasswordGenerated={pwd => set('password', pwd)}
@@ -432,18 +345,8 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
             value={form.note}
             onChange={e => set('note', e.target.value)}
             rows={8}
-            placeholder="Escreva sua nota segura aqui..."
-            style={{
-              width: '100%', padding: '10px 12px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 10, color: '#f0f0f0',
-              fontFamily: tokens.typography.fontFamily, fontSize: '13px',
-              outline: 'none', resize: 'vertical', lineHeight: 1.6,
-              transition: 'border-color 0.15s',
-            }}
-            onFocus={e => { e.currentTarget.style.borderColor = 'rgba(79,152,163,0.45)'; }}
-            onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+                        className="input"
+            style={{ lineHeight: 1.6 }}
           />
         </Section>
       )}
@@ -504,14 +407,8 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p style={{
-        fontFamily: tokens.typography.fontFamily, fontSize: '10px', fontWeight: 600,
-        color: tokens.colors.neutral6, textTransform: 'uppercase', letterSpacing: '0.1em',
-        marginBottom: 10,
-      }}>
-        {label}
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>{label}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {children}
       </div>
     </div>
@@ -521,12 +418,8 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label style={{
-        display: 'block', fontFamily: tokens.typography.fontFamily,
-        fontSize: '11px', fontWeight: 500,
-        color: 'rgba(255,255,255,0.5)', marginBottom: 5,
-      }}>
-        {label}{required && <span style={{ color: '#e87da0', marginLeft: 3 }}>*</span>}
+      <label className="field-label">
+        {label}{required && <span style={{ color: 'var(--text-3)', fontWeight: 400 }}> (obrigatório)</span>}
       </label>
       {children}
     </div>
@@ -534,19 +427,11 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 function TwoCol({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{children}</div>;
+  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{children}</div>;
 }
 
 function InfoBox({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      padding: '9px 12px', borderRadius: 8,
-      background: 'rgba(79,152,163,0.06)', border: '1px solid rgba(79,152,163,0.15)',
-      fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral7, lineHeight: 1.5,
-    }}>
-      {children}
-    </div>
-  );
+  return <div className="note">{children}</div>;
 }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
@@ -566,17 +451,8 @@ function Inp({ value, onChange, placeholder, type = 'text', mono = false, autoFo
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       autoFocus={autoFocus}
-      style={{
-        width: '100%', padding: '9px 12px',
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 9, color: '#f0f0f0', outline: 'none',
-        fontFamily: mono ? tokens.typography.fontFamilyMono : tokens.typography.fontFamily,
-        fontSize: '13px', transition: 'border-color 0.15s, box-shadow 0.15s',
-        ...extra,
-      }}
-      onFocus={e => { e.currentTarget.style.borderColor = 'rgba(79,152,163,0.5)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(79,152,163,0.08)'; }}
-      onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
+      className={mono ? 'input mono' : 'input'}
+      style={extra}
     />
   );
 }
@@ -584,18 +460,9 @@ function Inp({ value, onChange, placeholder, type = 'text', mono = false, autoFo
 // ─── Small helpers ────────────────────────────────────────────────────────────
 
 function SmallIconBtn({ children, label, onClick, active }: { children: React.ReactNode; label: string; onClick: () => void; active?: boolean }) {
-  const [hov, setHov] = useState(false);
   return (
-    <button type="button" onClick={onClick} aria-label={label} title={label}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{
-        width: 26, height: 26, borderRadius: 6, border: 'none',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: active ? 'rgba(79,152,163,0.2)' : hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)',
-        color: active ? '#4f98a3' : hov ? '#fff' : tokens.colors.neutral6,
-        cursor: 'pointer', transition: 'all 0.13s', flexShrink: 0,
-      }}
-    >
+    <button type="button" onClick={onClick} aria-label={label} title={label} className="icon-btn"
+      style={active ? { background: 'var(--accent-soft)', color: 'var(--accent)' } : undefined}>
       {children}
     </button>
   );
@@ -603,65 +470,14 @@ function SmallIconBtn({ children, label, onClick, active }: { children: React.Re
 
 function FavoriteToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button type="button" onClick={() => onChange(!on)} style={{
-      background: 'none', border: 'none', cursor: 'pointer', padding: 2,
-      fontSize: 18, color: on ? '#fdab43' : 'rgba(255,255,255,0.18)',
-      transition: 'color 0.15s', lineHeight: 1,
-    }}>
-      {on ? '★' : '☆'}
+    <button type="button" className="star" aria-pressed={on} onClick={() => onChange(!on)}
+      style={{ alignItems: 'center', gap: 8, fontSize: 13 }}>
+      <svg width={16} height={16} viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+      <span style={{ color: 'var(--text-2)' }}>Favorito</span>
     </button>
   );
-}
-
-function GhostBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button type="button" onClick={onClick}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{
-        padding: '9px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)',
-        background: hov ? 'rgba(255,255,255,0.06)' : 'transparent',
-        color: tokens.colors.neutral8, fontFamily: tokens.typography.fontFamily,
-        fontSize: '13px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.13s',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PrimaryBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button type="button" onClick={onClick}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{
-        padding: '9px 22px', borderRadius: 10, border: 'none',
-        background: hov
-          ? 'linear-gradient(135deg, #3d7a84, #4f98a3)'
-          : 'linear-gradient(135deg, #4f98a3, #3d7a84)',
-        color: '#fff', fontFamily: tokens.typography.fontFamily,
-        fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-        boxShadow: hov ? '0 4px 16px rgba(79,152,163,0.4)' : '0 2px 8px rgba(79,152,163,0.25)',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ─── TypeIcon ─────────────────────────────────────────────────────────────────
-
-function TypeIcon({ type, size, color }: { type: VaultItemType; size: number; color: string }) {
-  const s = { width: size, height: size, fill: 'none', stroke: color, strokeWidth: 1.7 };
-  switch (type) {
-    case 'password': return <svg viewBox="0 0 24 24" style={s}><rect x={3} y={11} width={18} height={11} rx={2}/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
-    case 'card':     return <svg viewBox="0 0 24 24" style={s}><rect x={1} y={4} width={22} height={16} rx={2}/><line x1={1} y1={10} x2={23} y2={10}/></svg>;
-    case 'note':     return <svg viewBox="0 0 24 24" style={s}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg>;
-    case 'identity': return <svg viewBox="0 0 24 24" style={s}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx={12} cy={7} r={4}/></svg>;
-    case 'totp':     return <svg viewBox="0 0 24 24" style={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>;
-    case 'passkey':  return <svg viewBox="0 0 24 24" style={s}><circle cx={12} cy={8} r={4}/><path d="M12 12v8M9 18h6"/></svg>;
-  }
 }
 
 function titlePlaceholder(type: VaultItemType): string {

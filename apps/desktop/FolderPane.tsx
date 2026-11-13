@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { tokens } from '@ui/design-system/tokens';
-import { useToast } from '@ui/components/organisms';
+import { useToast, Modal } from '@ui/components/organisms';
+import { Button } from '@ui/components/atoms';
 import { generateId, saveFile } from '@shared/utils';
 import {
   encryptVault, decryptVault,
@@ -195,22 +195,19 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
   return (
     <>
       {/* ── Pane 2 ── */}
-      <div style={{ width: 296, flexShrink: 0, background: '#0a0a0f', borderRight: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ width: 304, flexShrink: 0, background: 'var(--surface)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {!liveFolder ? (
-          /* Folder list */
           <>
-            <div style={{ padding: '16px 14px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', fontWeight: 600, color: tokens.colors.neutral9 }}>Pastas Seguras</span>
-                <button onClick={() => { setEditingFolder(null); setShowCreateDialog(true); }} style={actionBtn}>+ Nova</button>
+            <div style={paneHeader}>
+              <div>
+                <h2 style={paneTitle}>Pastas seguras</h2>
+                <p style={paneSub}>{folders.length} {folders.length === 1 ? 'pasta' : 'pastas'}</p>
               </div>
-              <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral5, marginTop: 6 }}>
-                {folders.length} {folders.length === 1 ? 'pasta' : 'pastas'} · protegidas por senha individual
-              </p>
+              <Button variant="secondary" size="sm" onClick={() => { setEditingFolder(null); setShowCreateDialog(true); }}>Nova pasta</Button>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
               {folders.length === 0 ? (
-                <EmptyFolders onNew={() => setShowCreateDialog(true)} />
+                <EmptyHint title="Nenhuma pasta ainda" text="Crie uma pasta para guardar arquivos cifrados." />
               ) : (
                 folders.map(folder => (
                   <FolderCard
@@ -230,35 +227,22 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
             </div>
           </>
         ) : (
-          /* File list */
           <>
-            <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <button
-                onClick={() => { setSelectedId(null); setSelectedFileId(null); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: tokens.colors.neutral6, fontFamily: tokens.typography.fontFamily, fontSize: '12px', padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5, transition: 'color 0.14s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = liveFolder.color; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = tokens.colors.neutral6; }}
-              >
-                <ChevronLeftIcon /> Pastas
+            <div style={{ padding: '10px 12px 0' }}>
+              <button type="button" className="link-btn" style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => { setSelectedId(null); setSelectedFileId(null); }}>
+                <ChevronLeftIcon /> Todas as pastas
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: liveFolder.color, flexShrink: 0 }} />
-                  <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', fontWeight: 600, color: tokens.colors.neutral9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {liveFolder.name}
-                  </span>
-                </div>
-                <button onClick={() => fileInputRef.current?.click()} style={actionBtn}>+ Upload</button>
+            </div>
+            <div style={paneHeader}>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ ...paneTitle, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ColorDot color={liveFolder.color} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{liveFolder.name}</span>
+                </h2>
+                <p style={paneSub}>{liveFolderState?.files.length ?? 0} {(liveFolderState?.files.length ?? 0) === 1 ? 'arquivo' : 'arquivos'}</p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
-                <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral5, flex: 1 }}>
-                  {liveFolderState?.files.length ?? 0} arquivo(s)
-                </p>
-                <button onClick={() => handleLock(liveFolder.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(79,152,163,0.5)', fontFamily: tokens.typography.fontFamily, fontSize: '10px', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
-                  title="Bloquear pasta">
-                  <LockSmallIcon /> Bloquear
-                </button>
-              </div>
+              <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Adicionar</Button>
             </div>
 
             <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }}
@@ -268,15 +252,15 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
               onDragOver={e => { e.preventDefault(); setDraggingOver(true); }}
               onDragLeave={() => setDraggingOver(false)}
               onDrop={e => handleDrop(e, liveFolder.id)}
-              style={{ flex: 1, overflowY: 'auto', padding: '10px', position: 'relative', border: draggingOver ? '1px dashed rgba(79,152,163,0.4)' : '1px solid transparent', borderRadius: 8, margin: 4, transition: 'border-color 0.14s' }}
+              style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px', position: 'relative' }}
             >
               {draggingOver && (
-                <div style={{ position: 'absolute', inset: 0, background: 'rgba(79,152,163,0.06)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                  <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: '#4f98a3', fontWeight: 600 }}>Soltar aqui</span>
+                <div style={{ position: 'absolute', inset: 6, background: 'var(--accent-soft)', border: '2px dashed var(--accent)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                  <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500 }}>Solte para adicionar à pasta</span>
                 </div>
               )}
               {(liveFolderState?.files.length ?? 0) === 0 ? (
-                <EmptyFiles onUpload={() => fileInputRef.current?.click()} />
+                <EmptyHint title="Pasta vazia" text="Arraste arquivos para cá ou use Adicionar. Limite de 50 MB por arquivo." />
               ) : (
                 liveFolderState!.files.map(file => (
                   <FileRow
@@ -292,7 +276,7 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
       </div>
 
       {/* ── Pane 3 ── */}
-      <div style={{ flex: 1, background: '#0c0c12', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{ flex: 1, background: 'var(--canvas)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {liveFolder && selectedFile ? (
           <FileDetailPane
             file={selectedFile} folder={liveFolder}
@@ -353,49 +337,31 @@ function UnlockDialog({ folder, onUnlock, onClose }: {
     setLoading(true); setError('');
     const ok = await onUnlock(password);
     setLoading(false);
-    if (!ok) { setError('Senha incorreta'); setPassword(''); }
+    if (!ok) { setError('Senha incorreta. Tente de novo.'); setPassword(''); }
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: 360, padding: '28px', background: 'rgba(10,10,18,0.99)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 18, boxShadow: '0 24px 64px rgba(0,0,0,0.8)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, borderRadius: '18px 18px 0 0', background: `linear-gradient(90deg, ${folder.color}, transparent)` }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 11, background: `${folder.color}18`, border: `1px solid ${folder.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <FolderIcon color={folder.color} size={20} />
-          </div>
-          <div>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '14px', fontWeight: 700, color: tokens.colors.neutral12 }}>{folder.name}</p>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral5, marginTop: 2 }}>Digite a senha desta pasta</p>
-          </div>
-        </div>
-
-        <div style={{ position: 'relative', marginBottom: error ? 8 : 20 }}>
+    <Modal open onClose={onClose} title={`Desbloquear "${folder.name}"`} size="sm"
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button onClick={handleTry} disabled={!password} loading={loading}>Desbloquear</Button>
+      </>}
+    >
+      <Field label="Senha da pasta" error={error}>
+        <div style={{ position: 'relative' }}>
           <input
             type={show ? 'text' : 'password'}
             value={password}
             onChange={e => { setPassword(e.target.value); setError(''); }}
-            onKeyDown={e => { if (e.key === 'Enter') handleTry(); if (e.key === 'Escape') onClose(); }}
-            placeholder="Senha da pasta"
+            onKeyDown={e => { if (e.key === 'Enter') handleTry(); }}
             autoFocus
-            style={{ width: '100%', padding: '11px 44px 11px 14px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${error ? 'rgba(209,99,167,0.5)' : 'rgba(255,255,255,0.09)'}`, borderRadius: 10, color: '#f0f0f0', fontFamily: tokens.typography.fontFamily, fontSize: '14px', outline: 'none', transition: 'border-color 0.15s' }}
+            className={`input${error ? ' input--error' : ''}`}
+            style={{ paddingRight: 40 }}
           />
-          <button onClick={() => setShow(v => !v)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: tokens.colors.neutral6, padding: 2, display: 'flex' }}>
-            {show ? <EyeOffIcon /> : <EyeOnIcon />}
-          </button>
+          <EyeBtn show={show} onToggle={() => setShow(v => !v)} />
         </div>
-
-        {error && <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: '#e87da0', marginBottom: 14 }}>{error}</p>}
-
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onClose} style={secondaryBtn}>Cancelar</button>
-          <button onClick={handleTry} disabled={!password || loading} style={{ ...primaryBtn, flex: 1, justifyContent: 'center', opacity: !password || loading ? 0.5 : 1, cursor: !password || loading ? 'not-allowed' : 'pointer' }}>
-            {loading ? 'Verificando...' : 'Desbloquear'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </Field>
+    </Modal>
   );
 }
 
@@ -406,65 +372,36 @@ function FolderCard({ folder, unlocked, onClick, onEdit, onDelete, onLock }: {
   onClick: () => void; onEdit: () => void;
   onDelete: () => void; onLock: () => void;
 }) {
-  const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div
+    <div role="button" tabIndex={0} className="list-item" style={{ cursor: 'pointer', position: 'relative' }}
       onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => { setHov(false); setMenuOpen(false); }}
-      style={{
-        padding: '11px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4,
-        background: hov ? `${folder.color}0c` : 'transparent',
-        border: `1px solid ${hov ? `${folder.color}20` : 'transparent'}`,
-        borderLeft: `3px solid ${hov ? folder.color : 'rgba(255,255,255,0.05)'}`,
-        transition: 'all 0.14s', display: 'flex', alignItems: 'center', gap: 11, position: 'relative',
-      }}
+      onKeyDown={e => { if (e.key === 'Enter') onClick(); }}
+      onMouseLeave={() => setMenuOpen(false)}
     >
-      {/* Icon */}
-      <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: `${folder.color}18`, border: `1px solid ${folder.color}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-        <FolderIcon color={folder.color} />
-        {/* Lock overlay */}
-        {!unlocked && (
-          <div style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#0a0a0f', border: `1px solid ${folder.color}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth={2.5}>
-              <rect x={3} y={11} width={18} height={11} rx={2} /><path d="M7 11V7a5 5 0 0110 0v4" />
-            </svg>
-          </div>
-        )}
-        {unlocked && (
-          <div style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#0a0a0f', border: '1px solid rgba(109,170,69,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="#6daa45" strokeWidth={2.5}>
-              <rect x={3} y={11} width={18} height={11} rx={2} /><path d="M7 11V7a5 5 0 019.9-1" />
-            </svg>
-          </div>
-        )}
-      </div>
-
-      {/* Text */}
+      <span className="tile"><FolderIcon color="currentColor" size={16} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', fontWeight: 600, color: tokens.colors.neutral11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {folder.name}
+        <div className="list-item__title" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <ColorDot color={folder.color} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{folder.name}</span>
         </div>
-        <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: unlocked ? 'rgba(109,170,69,0.7)' : tokens.colors.neutral5, marginTop: 2 }}>
-          {unlocked ? 'Desbloqueada · clique para abrir' : 'Protegida · clique para desbloquear'}
-        </div>
+        <div className="list-item__sub">{unlocked ? 'Desbloqueada' : 'Bloqueada'}</div>
       </div>
 
-      {/* Menu */}
-      {hov && (
-        <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          <button onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', color: tokens.colors.neutral6, fontSize: '14px', lineHeight: 1 }}>···</button>
-          {menuOpen && (
-            <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#13131e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, padding: 4, zIndex: 100, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,0.6)' }}>
-              <MenuBtn onClick={() => { setMenuOpen(false); onEdit(); }}>Renomear</MenuBtn>
-              {unlocked && <MenuBtn onClick={() => { setMenuOpen(false); onLock(); }}>Bloquear</MenuBtn>}
-              <MenuBtn onClick={() => { setMenuOpen(false); onDelete(); }} danger>Excluir pasta</MenuBtn>
-            </div>
-          )}
-        </div>
-      )}
+      <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <button type="button" className="icon-btn" aria-label={`Ações da pasta ${folder.name}`} aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(v => !v)}>
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><circle cx={5} cy={12} r={1.7} /><circle cx={12} cy={12} r={1.7} /><circle cx={19} cy={12} r={1.7} /></svg>
+        </button>
+        {menuOpen && (
+          <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 2, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 4, zIndex: 100, minWidth: 150, boxShadow: 'var(--shadow-pop)' }}>
+            <MenuBtn onClick={() => { setMenuOpen(false); onEdit(); }}>Renomear</MenuBtn>
+            {unlocked && <MenuBtn onClick={() => { setMenuOpen(false); onLock(); }}>Bloquear</MenuBtn>}
+            <MenuBtn onClick={() => { setMenuOpen(false); onDelete(); }} danger>Excluir pasta</MenuBtn>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -472,19 +409,15 @@ function FolderCard({ folder, unlocked, onClick, onEdit, onDelete, onLock }: {
 // ── FileRow ───────────────────────────────────────────────────────────────────
 
 function FileRow({ file, selected, onClick }: { file: VaultFile; selected: boolean; onClick: () => void }) {
-  const [hov, setHov] = useState(false);
   return (
-    <div
+    <div role="option" tabIndex={0} aria-selected={selected} className="list-item" style={{ cursor: 'pointer' }}
       onClick={onClick}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ padding: '9px 11px', borderRadius: 9, cursor: 'pointer', marginBottom: 3, background: selected ? 'rgba(79,152,163,0.1)' : hov ? 'rgba(255,255,255,0.03)' : 'transparent', border: `1px solid ${selected ? 'rgba(79,152,163,0.25)' : 'transparent'}`, borderLeft: `2px solid ${selected ? '#4f98a3' : 'transparent'}`, transition: 'all 0.13s', display: 'flex', alignItems: 'center', gap: 10 }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
-      <div style={{ width: 30, height: 30, borderRadius: 7, flexShrink: 0, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <FileTypeIcon mimeType={file.mimeType} size={15} />
-      </div>
+      <span className="tile"><FileTypeIcon mimeType={file.mimeType} size={15} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', fontWeight: 500, color: tokens.colors.neutral11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
-        <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: tokens.colors.neutral5, marginTop: 1 }}>{formatBytes(file.size)} · {formatDate(file.createdAt)}</div>
+        <div className="list-item__title">{file.name}</div>
+        <div className="list-item__sub">{formatBytes(file.size)} · {formatDate(file.createdAt)}</div>
       </div>
     </div>
   );
@@ -496,43 +429,36 @@ function FileDetailPane({ file, folder, onDownload, onDelete }: { file: VaultFil
   const isImage = file.mimeType.startsWith('image/');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 12, flexShrink: 0, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <FileTypeIcon mimeType={file.mimeType} size={24} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ fontFamily: tokens.typography.fontFamily, fontSize: '16px', fontWeight: 700, color: tokens.colors.neutral12, wordBreak: 'break-all' }}>{file.name}</h2>
-          <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral6, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: folder.color }} />
-            {folder.name} · {formatBytes(file.size)}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={detailColumn}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <span className="tile tile--lg"><FileTypeIcon mimeType={file.mimeType} size={19} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={detailTitle}>{file.name}</h2>
+              <p style={paneSub}>{folder.name} · {formatBytes(file.size)}</p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-        {isImage && (
-          <div style={{ marginBottom: 20, borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
-            <img src={`data:${file.mimeType};base64,${file.data}`} alt={file.name} style={{ width: '100%', maxHeight: 320, objectFit: 'contain', display: 'block' }} />
+          {isImage && (
+            <div className="card" style={{ marginBottom: 12, overflow: 'hidden' }}>
+              <img src={`data:${file.mimeType};base64,${file.data}`} alt={file.name} style={{ width: '100%', maxHeight: 320, objectFit: 'contain', display: 'block' }} />
+            </div>
+          )}
+          <div className="card">
+            <MetaBlock label="Tipo" value={file.mimeType || 'Desconhecido'} />
+            <MetaBlock label="Tamanho" value={formatBytes(file.size)} />
+            <MetaBlock label="Adicionado" value={formatDate(file.createdAt)} />
           </div>
-        )}
-        <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.04)', padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <MetaBlock label="Nome" value={file.name} />
-          <MetaBlock label="Tamanho" value={formatBytes(file.size)} />
-          <MetaBlock label="Tipo" value={file.mimeType} />
-          <MetaBlock label="Adicionado" value={formatDate(file.createdAt)} />
-        </div>
-        <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(79,152,163,0.06)', border: '1px solid rgba(79,152,163,0.15)', borderRadius: 10, display: 'flex', gap: 10 }}>
-          <span style={{ fontSize: 13, flexShrink: 0 }}>🔒</span>
-          <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(79,152,163,0.8)', lineHeight: 1.5, margin: 0 }}>
-            Criptografado com AES-256-GCM pela senha desta pasta — separada da senha mestra.
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 14, lineHeight: 1.5 }}>
+            Cifrado com AES-256-GCM pela senha desta pasta, que é separada da senha mestra.
           </p>
         </div>
       </div>
 
-      <div style={{ padding: '14px 24px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8 }}>
-        <button onClick={onDownload} style={primaryBtn}><DownloadIcon /> Baixar arquivo</button>
+      <div style={actionBar}>
+        <Button onClick={onDownload}><DownloadIcon /> Baixar</Button>
         <div style={{ marginLeft: 'auto' }}>
-          <button onClick={onDelete} style={dangerBtn}>Excluir</button>
+          <Button variant="danger" onClick={onDelete}>Excluir arquivo</Button>
         </div>
       </div>
     </div>
@@ -547,75 +473,54 @@ function FolderDetailPane({ folder, fileCount, totalSize, onUpload, onEdit, onDe
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 14, flexShrink: 0, background: `${folder.color}18`, border: `1px solid ${folder.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <FolderIcon color={folder.color} size={26} />
-        </div>
-        <div>
-          <h2 style={{ fontFamily: tokens.typography.fontFamily, fontSize: '18px', fontWeight: 700, color: tokens.colors.neutral12 }}>{folder.name}</h2>
-          <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: 'rgba(109,170,69,0.7)', marginTop: 4 }}>
-            Desbloqueada · {fileCount} arquivo(s) · {formatBytes(totalSize)}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={detailColumn}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            <span className="tile tile--lg"><FolderIcon color="currentColor" size={19} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={{ ...detailTitle, display: 'flex', alignItems: 'center', gap: 8 }}><ColorDot color={folder.color} />{folder.name}</h2>
+              <p style={paneSub}>Desbloqueada · {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · {formatBytes(totalSize)}</p>
+            </div>
           </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 14 }}>
+            Escolha um arquivo na lista para ver os detalhes ou baixá-lo.
+          </p>
+          <Button variant="secondary" onClick={onUpload}><UploadIcon /> Adicionar arquivos</Button>
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32 }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 12, opacity: 0.15 }}>📁</div>
-          <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: tokens.colors.neutral6 }}>Selecione um arquivo para ver detalhes</p>
-        </div>
-        <button onClick={onUpload} style={primaryBtn}><UploadIcon /> Adicionar arquivos</button>
-      </div>
-
-      <div style={{ padding: '14px 24px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8 }}>
-        <button onClick={onEdit} style={secondaryBtn}>Renomear</button>
-        <button onClick={onLock} style={secondaryBtn}><LockSmallIcon /> Bloquear</button>
+      <div style={actionBar}>
+        <Button variant="secondary" onClick={onEdit}>Renomear</Button>
+        <Button variant="secondary" onClick={onLock}>Bloquear</Button>
         <div style={{ marginLeft: 'auto' }}>
-          <button onClick={onDelete} style={dangerBtn}>Excluir pasta</button>
+          <Button variant="danger" onClick={onDelete}>Excluir pasta</Button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── FolderEmptyDetail ─────────────────────────────────────────────────────────
+// ── Estados vazios ────────────────────────────────────────────────────────────
 
 function FolderEmptyDetail({ onNew }: { onNew: () => void }) {
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
-      <div style={{ width: 64, height: 64, borderRadius: 18, background: 'rgba(253,171,67,0.06)', border: '1px solid rgba(253,171,67,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <FolderIcon color="rgba(253,171,67,0.4)" size={30} />
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
+      <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-2)' }}>Arquivos com senha própria</p>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.55, maxWidth: 320 }}>
+        Cada pasta é cifrada com uma senha separada da senha mestra. Os arquivos só aparecem depois de desbloquear.
+      </p>
+      <div style={{ marginTop: 18 }}>
+        <Button onClick={onNew}>Nova pasta</Button>
       </div>
-      <div style={{ textAlign: 'center' }}>
-        <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '15px', fontWeight: 600, color: tokens.colors.neutral7 }}>Pastas Seguras</p>
-        <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral5, marginTop: 6, lineHeight: 1.6, maxWidth: 280 }}>
-          Cada pasta tem sua própria senha, separada da senha mestra. Os arquivos só ficam visíveis após desbloquear.
-        </p>
-      </div>
-      <button onClick={onNew} style={primaryBtn}>+ Criar primeira pasta</button>
     </div>
   );
 }
 
-// ── EmptyFolders / EmptyFiles ─────────────────────────────────────────────────
-
-function EmptyFolders({ onNew }: { onNew: () => void }) {
+function EmptyHint({ title, text }: { title: string; text: string }) {
   return (
-    <div style={{ paddingTop: 40, textAlign: 'center' }}>
-      <div style={{ fontSize: 30, marginBottom: 12, opacity: 0.2 }}>📁</div>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: tokens.colors.neutral6, marginBottom: 14 }}>Nenhuma pasta criada</p>
-      <button onClick={onNew} style={actionBtn}>+ Criar pasta</button>
-    </div>
-  );
-}
-
-function EmptyFiles({ onUpload }: { onUpload: () => void }) {
-  return (
-    <div style={{ paddingTop: 40, textAlign: 'center' }}>
-      <div style={{ fontSize: 26, marginBottom: 12, opacity: 0.2 }}>📄</div>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: tokens.colors.neutral6, marginBottom: 6 }}>Pasta vazia</p>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral5, marginBottom: 14 }}>Arraste arquivos ou use o botão Upload</p>
-      <button onClick={onUpload} style={actionBtn}>Upload</button>
+    <div style={{ padding: '36px 16px', textAlign: 'center' }}>
+      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>{title}</p>
+      <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{text}</p>
     </div>
   );
 }
@@ -637,9 +542,9 @@ function FolderDialog({ initial, onSave, onClose }: {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!name.trim()) e.name = 'Nome obrigatório';
+    if (!name.trim()) e.name = 'Informe um nome para a pasta';
     if (!isEdit) {
-      if (pwd.length < MIN_FOLDER_PWD) e.pwd = `Mínimo ${MIN_FOLDER_PWD} caracteres`;
+      if (pwd.length < MIN_FOLDER_PWD) e.pwd = `Use pelo menos ${MIN_FOLDER_PWD} caracteres`;
       if (confirm !== pwd) e.confirm = 'As senhas não coincidem';
     }
     setErrors(e);
@@ -652,68 +557,51 @@ function FolderDialog({ initial, onSave, onClose }: {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: 400, padding: '28px', background: 'rgba(10,10,18,0.99)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 18, boxShadow: '0 24px 64px rgba(0,0,0,0.8)', position: 'relative' }} onClick={e => e.stopPropagation()}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, borderRadius: '18px 18px 0 0', background: `linear-gradient(90deg, ${color}, transparent)` }} />
-
-        <h3 style={{ fontFamily: tokens.typography.fontFamily, fontSize: '16px', fontWeight: 700, color: tokens.colors.neutral12, marginBottom: 22 }}>
-          {isEdit ? 'Renomear pasta' : 'Nova pasta segura'}
-        </h3>
-
-        {/* Name */}
+    <Modal open onClose={onClose} title={isEdit ? 'Renomear pasta' : 'Nova pasta segura'} size="sm"
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button onClick={handleSave}>{isEdit ? 'Salvar alterações' : 'Criar pasta'}</Button>
+      </>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Field label="Nome" error={errors.name}>
           <input type="text" value={name} onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: '' })); }}
-            placeholder="Ex: Documentos pessoais" autoFocus
-            onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
-            style={fieldInput(!!errors.name)} />
+            autoFocus className={`input${errors.name ? ' input--error' : ''}`} />
         </Field>
 
-        {/* Color */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={fieldLabel}>Cor</label>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <div>
+          <span className="field-label">Cor</span>
+          <div style={{ display: 'flex', gap: 10 }}>
             {FOLDER_COLORS.map(c => (
-              <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', border: `2px solid ${color === c ? c : 'transparent'}`, background: c, cursor: 'pointer', padding: 0, outline: 'none', boxShadow: color === c ? `0 0 0 3px rgba(0,0,0,0.5), 0 0 10px ${c}60` : 'none', transition: 'all 0.15s' }} />
+              <button key={c} type="button" aria-label={`Cor ${c}`} aria-pressed={color === c} onClick={() => setColor(c)}
+                style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', background: c, padding: 0, boxShadow: color === c ? `0 0 0 2px var(--surface), 0 0 0 4px ${c}` : 'none' }} />
             ))}
           </div>
         </div>
 
-        {/* Password — only on create */}
         {!isEdit && (
           <>
             <Field label="Senha da pasta" error={errors.pwd}>
               <div style={{ position: 'relative' }}>
                 <input type={showPwd ? 'text' : 'password'} value={pwd}
                   onChange={e => { setPwd(e.target.value); setErrors(p => ({ ...p, pwd: '' })); }}
-                  placeholder={`Mínimo ${MIN_FOLDER_PWD} caracteres`}
-                  style={{ ...fieldInput(!!errors.pwd), paddingRight: 44 }} />
+                  className={`input${errors.pwd ? ' input--error' : ''}`} style={{ paddingRight: 40 }} />
                 <EyeBtn show={showPwd} onToggle={() => setShowPwd(v => !v)} />
               </div>
             </Field>
             <Field label="Confirmar senha" error={errors.confirm}>
-              <div style={{ position: 'relative' }}>
-                <input type={showPwd ? 'text' : 'password'} value={confirm}
-                  onChange={e => { setConfirm(e.target.value); setErrors(p => ({ ...p, confirm: '' })); }}
-                  placeholder="Repita a senha"
-                  onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
-                  style={{ ...fieldInput(!!errors.confirm), paddingRight: 44 }} />
-                <EyeBtn show={showPwd} onToggle={() => setShowPwd(v => !v)} />
-              </div>
+              <input type={showPwd ? 'text' : 'password'} value={confirm}
+                onChange={e => { setConfirm(e.target.value); setErrors(p => ({ ...p, confirm: '' })); }}
+                onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                className={`input${errors.confirm ? ' input--error' : ''}`} />
             </Field>
-            <div style={{ padding: '9px 12px', background: 'rgba(253,171,67,0.06)', border: '1px solid rgba(253,171,67,0.18)', borderRadius: 9, marginBottom: 20 }}>
-              <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(253,171,67,0.8)', lineHeight: 1.5, margin: 0 }}>
-                Esta senha é <strong>separada da senha mestra</strong> e não pode ser recuperada. Guarde-a em segurança.
-              </p>
-            </div>
+            <p className="note">
+              Esta senha é separada da senha mestra e não pode ser recuperada. Sem ela, os arquivos da pasta ficam inacessíveis.
+            </p>
           </>
         )}
-
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={secondaryBtn}>Cancelar</button>
-          <button onClick={handleSave} style={primaryBtn}>{isEdit ? 'Salvar' : 'Criar pasta'}</button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -721,27 +609,31 @@ function FolderDialog({ initial, onSave, onClose }: {
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={fieldLabel}>{label}</label>
+    <div>
+      <label className="field-label">{label}</label>
       {children}
-      {error && <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: '#e87da0', marginTop: 4 }}>{error}</p>}
+      {error && <p className="field-error">{error}</p>}
     </div>
   );
 }
 
 function MetaBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: tokens.colors.neutral6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral9, marginTop: 3, wordBreak: 'break-all' }}>{value}</p>
+    <div className="card__row" style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text)', wordBreak: 'break-all', textAlign: 'right' }}>{value}</span>
     </div>
   );
 }
 
+function ColorDot({ color }: { color: string }) {
+  return <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />;
+}
+
 function MenuBtn({ children, onClick, danger }: { children: React.ReactNode; onClick: () => void; danger?: boolean }) {
-  const [hov, setHov] = useState(false);
   return (
-    <button onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ width: '100%', padding: '7px 10px', background: hov ? (danger ? 'rgba(209,99,167,0.1)' : 'rgba(255,255,255,0.06)') : 'transparent', border: 'none', borderRadius: 6, cursor: 'pointer', textAlign: 'left', fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: danger ? (hov ? '#e87da0' : 'rgba(232,125,160,0.7)') : (hov ? tokens.colors.neutral9 : tokens.colors.neutral7), display: 'block', transition: 'all 0.12s' }}>
+    <button type="button" onClick={onClick} className={danger ? 'btn btn--ghost btn--sm btn--full menu-danger' : 'btn btn--ghost btn--sm btn--full'}
+      style={{ justifyContent: 'flex-start', color: danger ? 'var(--danger)' : undefined }}>
       {children}
     </button>
   );
@@ -749,7 +641,8 @@ function MenuBtn({ children, onClick, danger }: { children: React.ReactNode; onC
 
 function EyeBtn({ show, onToggle }: { show: boolean; onToggle: () => void }) {
   return (
-    <button type="button" onClick={onToggle} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: tokens.colors.neutral6, padding: 2, display: 'flex' }}>
+    <button type="button" onClick={onToggle} className="icon-btn" style={{ position: 'absolute', right: 5, top: 5 }}
+      aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}>
       {show ? <EyeOffIcon /> : <EyeOnIcon />}
     </button>
   );
@@ -762,20 +655,18 @@ function FolderIcon({ color, size = 18 }: { color: string; size?: number }) {
 }
 
 function FileTypeIcon({ mimeType, size = 14 }: { mimeType: string; size?: number }) {
-  const s = { width: size, height: size, fill: 'none', strokeWidth: 1.5 };
-  if (mimeType.startsWith('image/')) return <svg viewBox="0 0 24 24" style={s} stroke="#9b7de8"><rect x={3} y={3} width={18} height={18} rx={2} /><circle cx={8.5} cy={8.5} r={1.5} /><polyline points="21 15 16 10 5 21" /></svg>;
-  if (mimeType === 'application/pdf') return <svg viewBox="0 0 24 24" style={s} stroke="#e87da0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>;
-  if (mimeType.startsWith('video/')) return <svg viewBox="0 0 24 24" style={s} stroke="#fdab43"><polygon points="23 7 16 12 23 17 23 7" /><rect x={1} y={5} width={15} height={14} rx={2} /></svg>;
-  if (mimeType.startsWith('audio/')) return <svg viewBox="0 0 24 24" style={s} stroke="#6daa45"><path d="M9 18V5l12-2v13" /><circle cx={6} cy={18} r={3} /><circle cx={18} cy={16} r={3} /></svg>;
-  return <svg viewBox="0 0 24 24" style={s} stroke="rgba(255,255,255,0.35)"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>;
+  const s = { width: size, height: size, fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 };
+  if (mimeType.startsWith('image/')) return <svg viewBox="0 0 24 24" style={s}><rect x={3} y={3} width={18} height={18} rx={2} /><circle cx={8.5} cy={8.5} r={1.5} /><polyline points="21 15 16 10 5 21" /></svg>;
+  if (mimeType.startsWith('video/')) return <svg viewBox="0 0 24 24" style={s}><polygon points="23 7 16 12 23 17 23 7" /><rect x={1} y={5} width={15} height={14} rx={2} /></svg>;
+  if (mimeType.startsWith('audio/')) return <svg viewBox="0 0 24 24" style={s}><path d="M9 18V5l12-2v13" /><circle cx={6} cy={18} r={3} /><circle cx={18} cy={16} r={3} /></svg>;
+  return <svg viewBox="0 0 24 24" style={s}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>;
 }
 
-function ChevronLeftIcon() { return <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="15 18 9 12 15 6" /></svg>; }
+function ChevronLeftIcon() { return <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}><polyline points="15 18 9 12 15 6" /></svg>; }
 function DownloadIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>; }
 function UploadIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>; }
-function LockSmallIcon() { return <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={3} y={11} width={18} height={11} rx={2} /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>; }
-function EyeOnIcon() { return <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>; }
-function EyeOffIcon() { return <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>; }
+function EyeOnIcon() { return <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx={12} cy={12} r={3} /></svg>; }
+function EyeOffIcon() { return <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" /></svg>; }
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 
@@ -792,46 +683,9 @@ function formatDate(iso: string): string {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const fieldLabel: React.CSSProperties = {
-  display: 'block', fontFamily: tokens.typography.fontFamily,
-  fontSize: '11px', fontWeight: 600, letterSpacing: '0.07em',
-  color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', marginBottom: 7,
-};
-
-const fieldInput = (hasError: boolean): React.CSSProperties => ({
-  width: '100%', padding: '10px 14px',
-  background: 'rgba(255,255,255,0.05)',
-  border: `1px solid ${hasError ? 'rgba(209,99,167,0.5)' : 'rgba(255,255,255,0.09)'}`,
-  borderRadius: 10, color: '#f0f0f0',
-  fontFamily: tokens.typography.fontFamily, fontSize: '14px', outline: 'none',
-});
-
-const actionBtn: React.CSSProperties = {
-  padding: '4px 10px', borderRadius: 6,
-  background: 'rgba(79,152,163,0.15)', border: '1px solid rgba(79,152,163,0.25)',
-  color: '#4f98a3', fontFamily: 'Inter, system-ui, sans-serif',
-  fontSize: '11px', fontWeight: 600, cursor: 'pointer',
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: '8px 16px', borderRadius: 9,
-  background: 'rgba(79,152,163,0.18)', border: '1px solid rgba(79,152,163,0.3)',
-  color: '#4f98a3', fontFamily: 'Inter, system-ui, sans-serif',
-  fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', gap: 7,
-};
-
-const secondaryBtn: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 9,
-  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)',
-  color: tokens.colors.neutral8, fontFamily: 'Inter, system-ui, sans-serif',
-  fontSize: '13px', fontWeight: 500, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', gap: 6,
-};
-
-const dangerBtn: React.CSSProperties = {
-  padding: '8px 14px', borderRadius: 9,
-  background: 'rgba(209,99,167,0.1)', border: '1px solid rgba(209,99,167,0.2)',
-  color: '#e87da0', fontFamily: 'Inter, system-ui, sans-serif',
-  fontSize: '13px', fontWeight: 500, cursor: 'pointer',
-};
+const paneHeader: React.CSSProperties = { padding: '12px 12px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 };
+const paneTitle: React.CSSProperties = { fontSize: 14, fontWeight: 600, color: 'var(--text)' };
+const paneSub: React.CSSProperties = { fontSize: 12, color: 'var(--text-3)', marginTop: 2 };
+const detailColumn: React.CSSProperties = { maxWidth: 640, margin: '0 auto', padding: '28px 28px 32px' };
+const detailTitle: React.CSSProperties = { fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)', lineHeight: 1.25, wordBreak: 'break-all' };
+const actionBar: React.CSSProperties = { padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', gap: 8 };

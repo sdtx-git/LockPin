@@ -12,11 +12,11 @@ type BadgeProps = BaseComponentProps & {
 };
 
 const variantStyles: Record<BadgeVariant, { bg: string; text: string }> = {
-  default: { bg: tokens.colors.neutral3, text: tokens.colors.neutral9 },
-  success: { bg: `${tokens.colors.success}20`, text: tokens.colors.success },
-  warning: { bg: `${tokens.colors.warning}20`, text: tokens.colors.warning },
-  error: { bg: `${tokens.colors.error}20`, text: tokens.colors.error },
-  info: { bg: `${tokens.colors.primary}20`, text: tokens.colors.primary },
+  default: { bg: 'var(--fill)', text: 'var(--text-2)' },
+  success: { bg: 'var(--success-soft)', text: 'var(--success)' },
+  warning: { bg: 'var(--warning-soft)', text: 'var(--warning)' },
+  error: { bg: 'var(--danger-soft)', text: 'var(--danger)' },
+  info: { bg: 'var(--accent-soft)', text: 'var(--accent)' },
 };
 
 export const Badge: React.FC<BadgeProps> = ({
@@ -38,7 +38,7 @@ export const Badge: React.FC<BadgeProps> = ({
         backgroundColor: styles.bg,
         color: styles.text,
         padding: '2px 8px',
-        borderRadius: tokens.radii.full,
+        borderRadius: 4,
         whiteSpace: 'nowrap',
       }}
       data-testid={props['data-testid']}

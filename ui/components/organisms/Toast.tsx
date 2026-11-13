@@ -64,8 +64,8 @@ function ToastContainer() {
     <div
       style={{
         position: 'fixed',
-        bottom: 20,
-        right: 20,
+        top: 16,
+        right: 16,
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
@@ -83,22 +83,23 @@ function ToastContainer() {
             alignItems: 'flex-start',
             gap: '10px',
             padding: '12px 16px',
-            backgroundColor: tokens.colors.neutral2,
-            borderRadius: tokens.radii.lg,
-            border: `1px solid ${tokens.colors.neutral3}`,
-            boxShadow: tokens.effects.shadowLg,
+            minWidth: 260,
+            backgroundColor: 'var(--surface)',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-pop)',
             cursor: 'pointer',
             animation: 'toast-enter 200ms ease',
           }}
         >
-          <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colorMap[toast.type]} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+          <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colorMap[toast.type]} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
             <path d={iconMap[toast.type]} />
           </svg>
           <div style={{ flex: 1 }}>
             <div style={{
               fontFamily: tokens.typography.fontFamily,
-              fontSize: tokens.typography.sizes.sm,
-              fontWeight: tokens.typography.weights.bold,
+              fontSize: tokens.typography.sizes.base,
+              fontWeight: tokens.typography.weights.medium,
               color: tokens.colors.neutral12,
             }}>
               {toast.title}
@@ -106,7 +107,7 @@ function ToastContainer() {
             {toast.description && (
               <div style={{
                 fontFamily: tokens.typography.fontFamily,
-                fontSize: tokens.typography.sizes.xs,
+                fontSize: tokens.typography.sizes.sm,
                 color: tokens.colors.neutral8,
                 marginTop: 2,
               }}>
