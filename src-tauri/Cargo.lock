@@ -1828,6 +1828,7 @@ version = "3.0.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
+ "libc",
  "rand",
  "serde",
  "serde_json",

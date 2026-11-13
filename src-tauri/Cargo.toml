@@ -19,6 +19,9 @@ base64 = "0.22"
 argon2 = "0.5"
 rand = "0.9"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "windows")'.dependencies.windows]
 version = "0.58"
 features = [
