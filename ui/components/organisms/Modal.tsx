@@ -26,9 +26,8 @@ export const Modal: React.FC<ModalProps> = ({
   footer,
   size = 'md',
 }) => {
-  const { tokens, theme } = useTheme();
+  const { tokens } = useTheme();
   const panelRef = useRef<HTMLDivElement>(null);
-  const isDark = theme === 'dark';
 
   useEffect(() => {
     if (!open) return;
@@ -55,18 +54,8 @@ export const Modal: React.FC<ModalProps> = ({
         padding: '20px',
       }}
     >
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'absolute', inset: 0,
-          background: isDark ? 'rgba(4,4,8,0.82)' : 'rgba(10,10,30,0.5)',
-          backdropFilter: 'blur(10px)',
-          WebkitBackdropFilter: 'blur(10px)',
-        }}
-      />
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--overlay)' }} />
 
-      {/* Panel */}
       <div
         ref={panelRef}
         tabIndex={-1}
@@ -75,61 +64,27 @@ export const Modal: React.FC<ModalProps> = ({
           width: '100%', maxWidth: maxWidths[size],
           maxHeight: '88vh',
           display: 'flex', flexDirection: 'column',
-          background: isDark ? 'rgba(8,8,14,0.98)' : 'rgba(250,251,255,0.99)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.1)'}`,
-          borderRadius: 18,
-          boxShadow: isDark
-            ? '0 40px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,152,163,0.06), inset 0 1px 0 rgba(255,255,255,0.06)'
-            : '0 20px 60px rgba(0,0,30,0.15), 0 0 0 1px rgba(79,152,163,0.1)',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          boxShadow: 'var(--shadow-pop)',
           outline: 'none',
           overflow: 'hidden',
-          animation: 'modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          animation: 'modal-in 0.16s ease-out',
         }}
       >
-        {/* Gradient top line */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-          background: 'linear-gradient(90deg, transparent 0%, rgba(79,152,163,0.5) 30%, rgba(155,125,232,0.4) 70%, transparent 100%)',
-          borderRadius: '18px 18px 0 0',
-        }} />
-
-        {/* Header */}
         {title && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '18px 22px 16px',
-            borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`,
+            padding: '14px 16px 14px 20px',
+            borderBottom: '1px solid var(--border)',
             flexShrink: 0,
           }}>
-            <h2 style={{
-              fontFamily: tokens.typography.fontFamily,
-              fontSize: '15px', fontWeight: 600, color: tokens.colors.neutral11, margin: 0,
-            }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
               {title}
             </h2>
-            <button
-              type="button" onClick={onClose} aria-label="Fechar"
-              style={{
-                width: 28, height: 28, borderRadius: 8,
-                border: 'none', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-                color: tokens.colors.neutral7, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.13s',
-              }}
-              onMouseEnter={e => {
-                const b = e.currentTarget as HTMLButtonElement;
-                b.style.background = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
-                b.style.color = tokens.colors.neutral11;
-              }}
-              onMouseLeave={e => {
-                const b = e.currentTarget as HTMLButtonElement;
-                b.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-                b.style.color = tokens.colors.neutral7;
-              }}
-            >
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
+            <button type="button" onClick={onClose} aria-label="Fechar" className="icon-btn">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -137,7 +92,7 @@ export const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 22px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
           {children}
         </div>
 
@@ -145,21 +100,14 @@ export const Modal: React.FC<ModalProps> = ({
         {footer && (
           <div style={{
             display: 'flex', justifyContent: 'flex-end', gap: 8,
-            padding: '14px 22px',
-            borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'}`,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--border)',
             flexShrink: 0,
           }}>
             {footer}
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes modal-in {
-          from { opacity: 0; transform: scale(0.96) translateY(8px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-      `}</style>
     </div>
   );
 };

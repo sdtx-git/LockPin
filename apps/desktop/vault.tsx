@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { tokens } from '@ui/design-system/tokens';
 import { useTheme } from '@ui/contexts/ThemeContext';
 import { useDebounce } from '@ui/contexts/useDebounce';
 import { useKeyboard } from '@ui/contexts/useKeyboard';
 import { PasswordGenerator, PasswordStrengthMeter } from '@ui/components/molecules';
-import { Button, Badge } from '@ui/components/atoms';
+import { Button, Logo } from '@ui/components/atoms';
 import { Modal } from '@ui/components/organisms';
 import { useToast } from '@ui/components/organisms';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -12,7 +11,7 @@ import type { VaultItem, VaultItemType, VaultData } from '@core/vault/types';
 import { searchItems, addItem, updateItem, deleteItem, restoreItem, emptyTrash, addAttachment } from '@core/vault/storage';
 import { exportVault } from '@core/vault/storage';
 import { parseBitwardenCsv, parseChromeCsv, parseGenericCsv, importItems } from '@core/vault/import';
-import { formatDate } from '@shared/utils';
+import { formatDate, saveFile } from '@shared/utils';
 import { shareItem, revokeSharing, getActiveShares } from '@core/sharing/service';
 import { generateTOTP, getTOTPRemainingSeconds } from '@core/vault/totp';
 import { createAuditLog } from '@core/audit/logger';
@@ -23,34 +22,21 @@ import type { FormData } from './VaultItemDialog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TYPE_COLOR: Record<VaultItemType, string> = {
-  password: '#4f98a3',
-  card: '#fdab43',
-  note: '#9b7de8',
-  identity: '#6daa45',
-  totp: '#e87da0',
-  passkey: '#63b3ff',
-};
-
 const TYPE_LABEL: Record<VaultItemType, string> = {
   password: 'Senha',
   card: 'Cartão',
   note: 'Nota',
   identity: 'Identidade',
-  totp: 'TOTP',
+  totp: 'Autenticador',
   passkey: 'Passkey',
 };
 
-const TYPE_BADGE_VARIANT: Record<VaultItemType, 'default' | 'info' | 'success' | 'warning' | 'error'> = {
-  password: 'info',
-  card: 'warning',
-  note: 'default',
-  identity: 'success',
-  totp: 'error',
-  passkey: 'info',
-};
-
 type FilterType = VaultItemType | 'all' | 'favorites' | 'folders' | 'trash';
+
+const FILTER_LABEL: Partial<Record<FilterType, string>> = {
+  all: 'Todos os itens', favorites: 'Favoritos', password: 'Senhas', totp: 'Autenticador',
+  card: 'Cartões', note: 'Notas', identity: 'Identidades', passkey: 'Passkeys',
+};
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
@@ -99,7 +85,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
   const [importFormat, setImportFormat] = useState<'bitwarden' | 'chrome' | 'generic'>('generic');
   const [exportPassword, setExportPassword] = useState('');
   const { addToast } = useToast();
-  const { theme, toggle: toggleTheme, tokens } = useTheme();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useKeyboard([
     { key: 'f', ctrl: true, handler: () => { setFilter('all'); searchRef.current?.focus(); } },
@@ -232,171 +218,99 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
 
   return (
     <div
-      style={{ display: 'flex', height: '100vh', background: 'var(--bg-app)', overflow: 'hidden' }}
+      style={{ display: 'flex', height: '100vh', background: 'var(--canvas)', overflow: 'hidden' }}
       onDragOver={e => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={e => { e.preventDefault(); setDragOver(false); handleAttachDrop(e, vault, onVaultChange, selectedItem?.id ?? null, addToast, masterPassword).catch(() => {}); }}
     >
       {dragOver && <div style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(79,152,163,0.08)',
-        border: '3px dashed rgba(79,152,163,0.4)',
+        position: 'fixed', inset: 8, zIndex: 9999, borderRadius: 10,
+        background: 'var(--accent-soft)', border: '2px dashed var(--accent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         pointerEvents: 'none',
       }}>
-        <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: 16, fontWeight: 600, color: 'rgba(79,152,163,0.6)' }}>
+        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--accent)' }}>
           Solte para anexar ao item selecionado
         </span>
       </div>}
       {/* ══ PANE 1 — Sidebar ══════════════════════════════════════════════════ */}
-      <div style={{
-        width: sidebarCollapsed ? 56 : 220,
-        flexShrink: 0,
-        background: 'var(--bg-sidebar)',
-        borderRight: '1px solid var(--border-dim)',
-        display: 'flex',
-        flexDirection: 'column',
-        userSelect: 'none',
-        overflow: 'hidden',
-        transition: 'width 0.2s',
-      }}>
-
-        {/* ── Logo ── */}
-        <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--border-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {sidebarCollapsed ? (
-            <button onClick={() => setSidebarCollapsed(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: tokens.colors.neutral6, padding: 4, flexShrink: 0 }}>
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><polyline points="15 18 9 12 15 6" /></svg>
-            </button>
-          ) : (
-            <>
-              <div style={{
-                width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                background: 'linear-gradient(135deg, rgba(79,152,163,0.18) 0%, rgba(155,125,232,0.12) 100%)',
-                border: '1px solid rgba(79,152,163,0.22)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 18px rgba(79,152,163,0.12)',
-              }}>
-                <LockIcon size={16} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: tokens.typography.fontFamily,
-                  fontSize: '13px', fontWeight: 800, letterSpacing: '0.08em',
-                  background: 'linear-gradient(135deg, #4f98a3 0%, #9b7de8 100%)',
-                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-                  lineHeight: 1,
-                }}>LOCKPIN</div>
-                <div style={{
-                  fontFamily: tokens.typography.fontFamily, fontSize: '10px',
-                  color: 'rgba(79,152,163,0.5)', marginTop: 3, letterSpacing: '0.02em',
-                }}>Vault desbloqueado</div>
-              </div>
-              <button onClick={() => setSidebarCollapsed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: tokens.colors.neutral6, padding: 4, flexShrink: 0 }}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><polyline points="9 18 15 12 9 6" /></svg>
-              </button>
-            </>
-          )}
+      <aside className="sidebar" style={{ width: sidebarCollapsed ? 56 : 224 }}>
+        <div style={{ height: 56, padding: sidebarCollapsed ? 0 : '0 10px 0 14px', display: 'flex', alignItems: 'center', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', gap: 10, flexShrink: 0 }}>
+          {!sidebarCollapsed && <>
+            <Logo size={26} />
+            <span style={{ flex: 1, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--sidebar-text-strong)' }}>LockPin</span>
+          </>}
+          <button className="sidebar__icon-btn" onClick={() => setSidebarCollapsed(v => !v)}
+            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={3} y={4} width={18} height={16} rx={2} /><line x1={9} y1={4} x2={9} y2={20} /></svg>
+          </button>
         </div>
 
-        {/* ── Nav ── */}
-        <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
-          <NavBtn label="Todos" count={vault.items.length} active={filter === 'all'} onClick={() => setFilter('all')}>
+        <div style={{ padding: '2px 8px 10px' }}>
+          <button className={`nav-item${sidebarCollapsed ? ' nav-item--compact' : ''}`} onClick={openAddModal} title="Novo item (Ctrl+N)"
+            style={{ background: 'var(--sidebar-active)', color: 'var(--sidebar-text-strong)', fontWeight: 500, height: 34 }}>
+            <PlusIcon />
+            {!sidebarCollapsed && <span className="nav-item__label">Novo item</span>}
+          </button>
+        </div>
+
+        <nav style={{ flex: 1, padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
+          <NavBtn label="Todos os itens" count={vault.items.length} active={filter === 'all'} onClick={() => setFilter('all')} compact={sidebarCollapsed}>
             <GridIcon />
           </NavBtn>
-          <NavBtn label="Favoritos" count={vault.items.filter(i => i.favorite).length} active={filter === 'favorites'} onClick={() => setFilter('favorites')} color="#fdab43">
+          <NavBtn label="Favoritos" count={vault.items.filter(i => i.favorite).length} active={filter === 'favorites'} onClick={() => setFilter('favorites')} compact={sidebarCollapsed}>
             <StarIcon />
           </NavBtn>
+          <NavBtn label="Pastas seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => setFilter('folders')} compact={sidebarCollapsed}>
+            <SidebarFolderIcon />
+          </NavBtn>
+          <NavBtn label="Lixeira" count={vault.trash?.length ?? 0} active={filter === 'trash'} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')} compact={sidebarCollapsed}>
+            <TrashIcon />
+          </NavBtn>
 
-          {!sidebarCollapsed && <SidebarLabel>Categorias</SidebarLabel>}
+          {!sidebarCollapsed && <SidebarLabel>Tipos</SidebarLabel>}
 
-          <NavBtn label="Senhas" count={vault.items.filter(i => i.type === 'password').length} active={filter === 'password'} onClick={() => setFilter('password')} color={TYPE_COLOR.password} compact={sidebarCollapsed}>
+          <NavBtn label="Senhas" count={vault.items.filter(i => i.type === 'password').length} active={filter === 'password'} onClick={() => setFilter('password')} compact={sidebarCollapsed}>
             <KeyIcon />
           </NavBtn>
-          <NavBtn label="TOTP" count={vault.items.filter(i => i.type === 'totp').length} active={filter === 'totp'} onClick={() => setFilter('totp')} color={TYPE_COLOR.totp} compact={sidebarCollapsed}>
+          <NavBtn label="Autenticador" count={vault.items.filter(i => i.type === 'totp').length} active={filter === 'totp'} onClick={() => setFilter('totp')} compact={sidebarCollapsed}>
             <ShieldClockIcon />
           </NavBtn>
-          <NavBtn label="Cartões" count={vault.items.filter(i => i.type === 'card').length} active={filter === 'card'} onClick={() => setFilter('card')} color={TYPE_COLOR.card} compact={sidebarCollapsed}>
+          <NavBtn label="Cartões" count={vault.items.filter(i => i.type === 'card').length} active={filter === 'card'} onClick={() => setFilter('card')} compact={sidebarCollapsed}>
             <CardIcon />
           </NavBtn>
-          <NavBtn label="Notas" count={vault.items.filter(i => i.type === 'note').length} active={filter === 'note'} onClick={() => setFilter('note')} color={TYPE_COLOR.note} compact={sidebarCollapsed}>
+          <NavBtn label="Notas" count={vault.items.filter(i => i.type === 'note').length} active={filter === 'note'} onClick={() => setFilter('note')} compact={sidebarCollapsed}>
             <NoteIcon />
           </NavBtn>
-          <NavBtn label="Identidades" count={vault.items.filter(i => i.type === 'identity').length} active={filter === 'identity'} onClick={() => setFilter('identity')} color={TYPE_COLOR.identity} compact={sidebarCollapsed}>
+          <NavBtn label="Identidades" count={vault.items.filter(i => i.type === 'identity').length} active={filter === 'identity'} onClick={() => setFilter('identity')} compact={sidebarCollapsed}>
             <PersonIcon />
-          </NavBtn>
-
-          {!sidebarCollapsed && <SidebarLabel>Armazenamento</SidebarLabel>}
-
-          <NavBtn label="Pastas Seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => setFilter('folders')} color="#fdab43" compact={sidebarCollapsed}>
-            <SidebarFolderIcon />
           </NavBtn>
 
           {!sidebarCollapsed && <SidebarLabel>Ferramentas</SidebarLabel>}
 
-          <NavBtn label="Gerador" active={false} onClick={() => setShowGenerator(true)} color="#9b7de8" compact={sidebarCollapsed}>
+          <NavBtn label="Gerador de senhas" active={false} onClick={() => setShowGenerator(true)} compact={sidebarCollapsed}>
             <WandIcon />
           </NavBtn>
-          <NavBtn label="Importar CSV" active={false} onClick={() => setShowImport(true)} color="#6daa45" compact={sidebarCollapsed}>
+          <NavBtn label="Importar" active={false} onClick={() => setShowImport(true)} compact={sidebarCollapsed}>
             <ImportIcon />
           </NavBtn>
-          <NavBtn label="Exportar" active={false} onClick={() => setShowExport(true)} color="#fdab43" compact={sidebarCollapsed}>
+          <NavBtn label="Exportar" active={false} onClick={() => setShowExport(true)} compact={sidebarCollapsed}>
             <ExportIcon />
-          </NavBtn>
-          <NavBtn label="Lixeira" count={vault.trash?.length ?? 0} active={filter === 'trash'} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')} color="#e87da0" compact={sidebarCollapsed}>
-            <TrashIcon />
-          </NavBtn>
-          <NavBtn label="Novo item" active={false} onClick={openAddModal} color="#4f98a3" compact={sidebarCollapsed}>
-            <PlusIcon />
           </NavBtn>
         </nav>
 
-        {/* ── Profile ── */}
-        <div style={{ padding: '10px 8px 12px', borderTop: '1px solid var(--border-dim)' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 12px', borderRadius: 12,
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-dim)',
-          }}>
-            {/* Avatar */}
-            <div style={{
-              width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-              background: 'linear-gradient(135deg, rgba(79,152,163,0.25) 0%, rgba(155,125,232,0.18) 100%)',
-              border: '1px solid rgba(79,152,163,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 12px rgba(79,152,163,0.08)',
-            }}>
-              <LockIcon size={14} />
-            </div>
-            {/* Info */}
-            {!sidebarCollapsed && <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: tokens.typography.fontFamily, fontSize: '12px', fontWeight: 500,
-                color: tokens.colors.neutral9,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                Vault Local
-              </div>
-              <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: 'rgba(109,170,69,0.65)', marginTop: 2, letterSpacing: '0.02em' }}>
-                Local · Encriptado
-              </div>
-            </div>}
-            {/* Theme toggle */}
-            <button onClick={toggleTheme} title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'} style={{
-              background: 'var(--bg-surface)', border: '1px solid var(--border-medium)',
-              borderRadius: 7, padding: 6, cursor: 'pointer', color: tokens.colors.neutral7,
-              display: 'flex', transition: 'all 0.15s', flexShrink: 0,
-            }}>
-              {theme === 'dark'
-                ? <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={12} cy={12} r={5} /><line x1={12} y1={1} x2={12} y2={3} /><line x1={12} y1={21} x2={12} y2={23} /><line x1={4.22} y1={4.22} x2={5.64} y2={5.64} /><line x1={18.36} y1={18.36} x2={19.78} y2={19.78} /><line x1={1} y1={12} x2={3} y2={12} /><line x1={21} y1={12} x2={23} y2={12} /><line x1={4.22} y1={19.78} x2={5.64} y2={18.36} /><line x1={18.36} y1={5.64} x2={19.78} y2={4.22} /></svg>
-                : <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
-              }
-            </button>
-            {/* Logout */}
-            <LogoutButton onLogout={onLogout} />
-          </div>
+        <div style={{ padding: 8, borderTop: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <NavBtn label={theme === 'dark' ? 'Tema claro' : 'Tema escuro'} active={false} onClick={toggleTheme} compact={sidebarCollapsed}>
+            {theme === 'dark'
+              ? <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={12} cy={12} r={5} /><line x1={12} y1={1} x2={12} y2={3} /><line x1={12} y1={21} x2={12} y2={23} /><line x1={4.22} y1={4.22} x2={5.64} y2={5.64} /><line x1={18.36} y1={18.36} x2={19.78} y2={19.78} /><line x1={1} y1={12} x2={3} y2={12} /><line x1={21} y1={12} x2={23} y2={12} /><line x1={4.22} y1={19.78} x2={5.64} y2={18.36} /><line x1={18.36} y1={5.64} x2={19.78} y2={4.22} /></svg>
+              : <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
+            }
+          </NavBtn>
+          <NavBtn label="Bloquear vault" active={false} onClick={onLogout} compact={sidebarCollapsed}>
+            <LogoutIcon />
+          </NavBtn>
         </div>
-      </div>
+      </aside>
 
       {filter === 'folders' ? (
         /* ══ FOLDER MODE — replaces panes 2 & 3 ════════════════════════════ */
@@ -406,86 +320,59 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
         />
       ) : filter === 'trash' ? (
         /* ══ TRASH VIEW ════════════════════════════════════════════════════ */
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 24, overflowY: 'auto', background: 'var(--bg-detail)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <h2 style={{ fontFamily: tokens.typography.fontFamily, fontSize: '18px', fontWeight: 700, color: tokens.colors.neutral12, margin: 0 }}>
-              Lixeira ({vault.trash?.length ?? 0})
-            </h2>
-            {(vault.trash?.length ?? 0) > 0 && (
-              <Button variant="danger" onClick={async () => { const v = await emptyTrash(vault); onVaultChange(v); addToast({ type: 'info', title: 'Lixeira esvaziada' }); }}>
-                Esvaziar Lixeira
-              </Button>
+        <div style={{ flex: 1, overflowY: 'auto', background: 'var(--canvas)' }}>
+          <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 28px 40px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, minHeight: 34 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)' }}>Lixeira</h2>
+              {(vault.trash?.length ?? 0) > 0 && (
+                <Button variant="danger" onClick={async () => { const v = await emptyTrash(vault); onVaultChange(v); addToast({ type: 'info', title: 'Lixeira esvaziada' }); }}>
+                  Esvaziar lixeira
+                </Button>
+              )}
+            </div>
+            {(vault.trash?.length ?? 0) === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Nenhum item excluído. Itens removidos ficam aqui até a lixeira ser esvaziada.</p>
+            ) : (
+              <div className="card">
+                {vault.trash.map(d => (
+                  <div key={d.item.id} className="card__row" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="tile"><TypeIcon type={d.item.type} size={15} color="currentColor" /></span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p className="list-item__title">{d.item.title}</p>
+                      <p className="list-item__sub">Excluído {formatDate(d.deletedAt)}</p>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={() => { onVaultChange(restoreItem(vault, d.item.id)); addToast({ type: 'success', title: 'Item restaurado' }); }}>
+                      Restaurar
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-          {(vault.trash?.length ?? 0) === 0 ? (
-            <div style={{ textAlign: 'center', paddingTop: 40 }}>
-              <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '14px', color: tokens.colors.neutral6 }}>Lixeira vazia</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {vault.trash.map(d => (
-                <div key={d.item.id} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 16px', background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-dim)', borderRadius: 10,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ opacity: 0.5 }}>
-                      <TypeIcon type={d.item.type} size={16} color={TYPE_COLOR[d.item.type]} />
-                    </div>
-                    <div>
-                      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', fontWeight: 600, color: tokens.colors.neutral10, margin: 0 }}>
-                        {d.item.title}
-                      </p>
-                      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6, margin: 0 }}>
-                        Excluído em {formatDate(d.deletedAt)}
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant="secondary" size="sm" onClick={() => { onVaultChange(restoreItem(vault, d.item.id)); addToast({ type: 'success', title: 'Item restaurado' }); }}>
-                    Restaurar
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       ) : (
         <>
           {/* ══ PANE 2 — Item List ══════════════════════════════════════════ */}
           <div style={{
-            width: 296, flexShrink: 0, background: 'var(--bg-list)',
-            borderRight: '1px solid var(--border-dim)',
+            width: 304, flexShrink: 0, background: 'var(--surface)',
+            borderRight: '1px solid var(--border)',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
-            <div style={{ padding: '16px 14px 12px', borderBottom: '1px solid var(--border-dim)' }}>
-              <SearchField value={search} onChange={setSearch} />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6 }}>
-                  {filtered.length} {filtered.length === 1 ? 'item' : 'itens'}
-                </span>
-                <button
-                  onClick={openAddModal}
-                  style={{ padding: '4px 10px', borderRadius: 6, background: 'rgba(79,152,163,0.15)', border: '1px solid rgba(79,152,163,0.3)', color: '#4f98a3', fontFamily: tokens.typography.fontFamily, fontSize: '11px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(79,152,163,0.28)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(79,152,163,0.15)'; }}
-                >
-                  + Novo
-                </button>
-              </div>
+            <div style={{ padding: '12px 12px 8px' }}>
+              <SearchField value={search} onChange={setSearch} inputRef={searchRef} />
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 2px 0' }}>
+                {FILTER_LABEL[filter] ?? 'Itens'} · {filtered.length}
+              </p>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
               {filtered.length === 0 ? (
-                <div style={{ paddingTop: 40, textAlign: 'center' }}>
-                  <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.2 }}>{search ? '🔍' : '🔒'}</div>
-                  <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: tokens.colors.neutral7 }}>
-                    {search ? 'Nenhum resultado' : 'Vault vazio'}
+                <div style={{ padding: '36px 16px', textAlign: 'center' }}>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>
+                    {search ? 'Nada encontrado' : 'Nenhum item aqui'}
                   </p>
-                  {!search && (
-                    <button onClick={openAddModal} style={{ marginTop: 12, padding: '6px 14px', borderRadius: 8, background: 'rgba(79,152,163,0.15)', border: '1px solid rgba(79,152,163,0.2)', color: '#4f98a3', fontFamily: tokens.typography.fontFamily, fontSize: '12px', cursor: 'pointer' }}>
-                      Adicionar item
-                    </button>
-                  )}
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                    {search ? 'Tente outro termo de busca.' : 'Adicione senhas, cartões, notas e códigos.'}
+                  </p>
                 </div>
               ) : (
                 filtered.map(item => (
@@ -501,7 +388,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
           </div>
 
           {/* ══ PANE 3 — Detail ═════════════════════════════════════════════ */}
-          <div style={{ flex: 1, background: 'var(--bg-detail)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          <div style={{ flex: 1, background: 'var(--canvas)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
             {!selectedItem ? (
               <EmptyDetailPane vault={vault} onAddNew={openAddModal} />
             ) : (
@@ -542,7 +429,8 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       <Modal
         open={showShareModal}
         onClose={() => setShowShareModal(false)}
-        title={`Compartilhar — "${selectedItem?.title}"`}
+        title={`Compartilhar "${selectedItem?.title}"`}
+        size="sm"
         footer={
           <>
             <Button variant="ghost" onClick={() => setShowShareModal(false)}>Cancelar</Button>
@@ -553,17 +441,10 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <ShareField label="Usuário / Email" value={shareUserId} onChange={setShareUserId} placeholder="user@email.com" autoFocus />
           <div>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Permissão</p>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <span className="field-label">Permissão</span>
+            <div className="segmented">
               {(['read', 'write', 'admin'] as const).map(p => (
-                <button key={p} onClick={() => setSharePermission(p)} style={{
-                  flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${sharePermission === p ? 'rgba(79,152,163,0.4)' : 'rgba(255,255,255,0.07)'}`,
-                  background: sharePermission === p ? 'rgba(79,152,163,0.12)' : 'rgba(255,255,255,0.03)',
-                  color: sharePermission === p ? '#4f98a3' : tokens.colors.neutral7,
-                  fontFamily: tokens.typography.fontFamily, fontSize: '12px', fontWeight: sharePermission === p ? 600 : 400,
-                  transition: 'all 0.13s',
-                }}>
+                <button key={p} type="button" aria-pressed={sharePermission === p} onClick={() => setSharePermission(p)}>
                   {p === 'read' ? 'Leitura' : p === 'write' ? 'Escrita' : 'Admin'}
                 </button>
               ))}
@@ -571,74 +452,60 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
           </div>
           {selectedItem && getActiveShares(selectedItem).length > 0 && (
             <div>
-              <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Compartilhado com
-              </p>
-              {getActiveShares(selectedItem).map(s => (
-                <div key={s.userId} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, marginBottom: 4,
-                  border: '1px solid rgba(255,255,255,0.06)',
-                }}>
-                  <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral9 }}>
-                    {s.userId} · <span style={{ color: tokens.colors.neutral6 }}>{s.permissions}</span>
-                  </span>
-                  <Button size="xs" variant="ghost" onClick={() => {
-                    if (!selectedItem) return;
-                    const updated = revokeSharing(selectedItem, s.userId);
-                    const newVault = { ...vault, items: vault.items.map(i => i.id === selectedItem.id ? updated : i) };
-                    onVaultChange(newVault);
-                  }}>
-                    Revogar
-                  </Button>
-                </div>
-              ))}
+              <span className="field-label">Compartilhado com</span>
+              <div className="card">
+                {getActiveShares(selectedItem).map(s => (
+                  <div key={s.userId} className="card__row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 8px 7px 12px' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>
+                      {s.userId} <span style={{ color: 'var(--text-3)' }}>({s.permissions})</span>
+                    </span>
+                    <Button size="xs" variant="ghost" onClick={() => {
+                      if (!selectedItem) return;
+                      const updated = revokeSharing(selectedItem, s.userId);
+                      const newVault = { ...vault, items: vault.items.map(i => i.id === selectedItem.id ? updated : i) };
+                      onVaultChange(newVault);
+                    }}>
+                      Revogar
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
       </Modal>
 
       {/* Standalone Generator (sidebar button) */}
-      <Modal open={showGenerator} onClose={() => setShowGenerator(false)} title="Gerador de Senhas" size="sm">
+      <Modal open={showGenerator} onClose={() => setShowGenerator(false)} title="Gerador de senhas" size="sm">
         <PasswordGenerator onPasswordGenerated={pwd => {
-          setForm(f => ({ ...f, password: pwd, type: 'password' }));
           setShowGenerator(false);
-          setShowAddModal(true);
+          openAddModal();
+          setForm(f => ({ ...f, password: pwd, type: 'password' }));
         }} />
       </Modal>
 
       {/* Import CSV */}
-      <Modal open={showImport} onClose={() => setShowImport(false)} title="Importar CSV" size="md">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '0 0 16px' }}>
+      <Modal open={showImport} onClose={() => setShowImport(false)} title="Importar itens" size="md">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Formato</p>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <span className="field-label">Origem</span>
+            <div className="segmented">
               {(['bitwarden', 'chrome', 'generic'] as const).map(f => (
-                <button key={f} onClick={() => setImportFormat(f)} style={{
-                  flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${importFormat === f ? 'rgba(79,152,163,0.4)' : 'rgba(255,255,255,0.07)'}`,
-                  background: importFormat === f ? 'rgba(79,152,163,0.12)' : 'rgba(255,255,255,0.03)',
-                  color: importFormat === f ? '#4f98a3' : tokens.colors.neutral7,
-                  fontFamily: tokens.typography.fontFamily, fontSize: '12px', fontWeight: importFormat === f ? 600 : 400,
-                }}>
-                  {f === 'bitwarden' ? 'Bitwarden' : f === 'chrome' ? 'Chrome' : 'Genérico'}
+                <button key={f} type="button" aria-pressed={importFormat === f} onClick={() => setImportFormat(f)}>
+                  {f === 'bitwarden' ? 'Bitwarden' : f === 'chrome' ? 'Chrome' : 'CSV genérico'}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Cole o CSV</p>
+            <label className="field-label">Conteúdo do CSV</label>
             <textarea
               value={importCsv}
               onChange={e => setImportCsv(e.target.value)}
-              rows={6}
-              placeholder="Cole o conteúdo CSV aqui..."
-              style={{
-                width: '100%', padding: '10px 12px',
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 10, color: '#f0f0f0', fontFamily: tokens.typography.fontFamilyMono,
-                fontSize: '12px', outline: 'none', resize: 'vertical',
-              }}
+              rows={7}
+              placeholder="Cole aqui o conteúdo do arquivo exportado"
+              className="input mono"
+              style={{ fontSize: 12 }}
             />
           </div>
           <Button onClick={() => {
@@ -652,47 +519,36 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
             setShowImport(false);
             addToast({ type: 'success', title: `${parsed.length} item(ns) importados!` });
           }} disabled={!importCsv.trim()}>
-            Importar
+            Importar itens
           </Button>
         </div>
       </Modal>
 
       {/* Export Vault */}
-      <Modal open={showExport} onClose={() => setShowExport(false)} title="Exportar Vault" size="sm">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '0 0 16px' }}>
-          <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: tokens.colors.neutral8, lineHeight: 1.5 }}>
-            Defina uma senha para exportar o vault. O arquivo será criptografado com AES-256-GCM.
+      <Modal open={showExport} onClose={() => setShowExport(false)} title="Exportar vault" size="sm">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
+            O arquivo exportado é cifrado com AES-256-GCM usando a senha abaixo. Ela será pedida para importar.
           </p>
           <div>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Senha de exportação</p>
+            <label className="field-label">Senha do arquivo</label>
             <input
               type="password" value={exportPassword}
               onChange={e => setExportPassword(e.target.value)}
-              placeholder="Senha para o arquivo exportado"
-              style={{
-                width: '100%', padding: '9px 12px',
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 9, color: '#f0f0f0', outline: 'none',
-                fontFamily: tokens.typography.fontFamily, fontSize: '13px',
-              }}
+              className="input"
             />
           </div>
           <Button onClick={async () => {
             if (!exportPassword) { addToast({ type: 'error', title: 'Defina uma senha' }); return; }
             try {
               const data = await exportVault(vault, exportPassword);
-              const blob = new Blob([data], { type: 'application/octet-stream' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url; a.download = `lockpin-export-${Date.now()}.enc`;
-              a.click();
-              URL.revokeObjectURL(url);
+              await saveFile(`lockpin-export-${Date.now()}.enc`, new TextEncoder().encode(data));
               setExportPassword('');
               setShowExport(false);
               addToast({ type: 'success', title: 'Vault exportado!' });
             } catch { addToast({ type: 'error', title: 'Falha ao exportar' }); }
           }} disabled={!exportPassword}>
-            Exportar
+            Exportar vault
           </Button>
         </div>
       </Modal>
@@ -706,18 +562,10 @@ function ShareField({ label, value, onChange, placeholder, autoFocus }: {
 }) {
   return (
     <div>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>{label}</p>
+      <label className="field-label">{label}</label>
       <input
         type="text" value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder} autoFocus={autoFocus}
-        style={{
-          width: '100%', padding: '9px 12px',
-          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 9, color: '#f0f0f0', outline: 'none',
-          fontFamily: tokens.typography.fontFamily, fontSize: '13px', transition: 'border-color 0.15s',
-        }}
-        onFocus={e => { e.currentTarget.style.borderColor = 'rgba(79,152,163,0.5)'; }}
-        onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+        placeholder={placeholder} autoFocus={autoFocus} className="input"
       />
     </div>
   );
@@ -739,62 +587,19 @@ async function handleAttachDrop(e: React.DragEvent, vault: VaultData, onVaultCha
 // ─── EmptyDetailPane ──────────────────────────────────────────────────────────
 
 function EmptyDetailPane({ vault, onAddNew }: { vault: VaultData; onAddNew: () => void }) {
-  const { tokens } = useTheme();
-  const counts = Object.entries({
-    password: vault.items.filter(i => i.type === 'password').length,
-    totp: vault.items.filter(i => i.type === 'totp').length,
-    card: vault.items.filter(i => i.type === 'card').length,
-    note: vault.items.filter(i => i.type === 'note').length,
-    identity: vault.items.filter(i => i.type === 'identity').length,
-  } as Record<VaultItemType, number>).filter(([, v]) => v > 0);
-
+  const empty = vault.items.length === 0;
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', gap: 28 }}>
-      <div style={{
-        width: 72, height: 72, borderRadius: 20,
-        background: 'rgba(79,152,163,0.08)',
-        border: '1px solid rgba(79,152,163,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 0 32px rgba(79,152,163,0.08)',
-      }}>
-        <LockIcon size={30} />
-      </div>
-
-      <div style={{ textAlign: 'center' }}>
-        <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '16px', fontWeight: 600, color: tokens.colors.neutral8, marginBottom: 6 }}>
-          Selecione um item
-        </p>
-        <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '13px', color: tokens.colors.neutral6 }}>
-          Os detalhes aparecerão aqui
-        </p>
-      </div>
-
-      {counts.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8, width: '100%', maxWidth: 380 }}>
-          {counts.map(([type, count]) => (
-            <div key={type} style={{
-              padding: '14px 12px', textAlign: 'center',
-              background: `${TYPE_COLOR[type as VaultItemType]}08`,
-              border: `1px solid ${TYPE_COLOR[type as VaultItemType]}18`,
-              borderRadius: 12,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
-                <TypeIcon type={type as VaultItemType} size={16} color={TYPE_COLOR[type as VaultItemType]} />
-              </div>
-              <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '20px', fontWeight: 700, color: tokens.colors.neutral11, lineHeight: 1 }}>{count}</div>
-              <div style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: tokens.colors.neutral6, marginTop: 4 }}>{TYPE_LABEL[type as VaultItemType]}</div>
-            </div>
-          ))}
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
+      <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-2)' }}>
+        {empty ? 'Seu vault está vazio' : 'Nenhum item selecionado'}
+      </p>
+      <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, maxWidth: 300 }}>
+        {empty ? 'Guarde a primeira senha, cartão ou nota. Tudo fica cifrado neste computador.' : 'Escolha um item na lista para ver os detalhes.'}
+      </p>
+      {empty && (
+        <div style={{ marginTop: 18 }}>
+          <Button onClick={onAddNew}>Novo item</Button>
         </div>
-      ) : (
-        <button onClick={onAddNew} style={{
-          padding: '10px 20px', borderRadius: 10,
-          background: 'rgba(79,152,163,0.15)', border: '1px solid rgba(79,152,163,0.25)',
-          color: '#4f98a3', fontFamily: tokens.typography.fontFamily, fontSize: '13px',
-          fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-        }}>
-          Adicionar primeiro item
-        </button>
       )}
     </div>
   );
@@ -819,58 +624,35 @@ interface ItemDetailPaneProps {
 function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavorite, vault, masterPassword, onVaultChange }: ItemDetailPaneProps) {
   const { tokens } = useTheme();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', animation: 'slide-in 0.18s ease' }}>
-      {/* Header */}
-      <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-dim)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 14,
-              background: `${TYPE_COLOR[item.type]}15`,
-              border: `1px solid ${TYPE_COLOR[item.type]}25`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: `0 0 20px ${TYPE_COLOR[item.type]}15`,
-              flexShrink: 0,
-            }}>
-              <TypeIcon type={item.type} size={22} color={TYPE_COLOR[item.type]} />
-            </div>
-            <div>
-              <h2 style={{ fontFamily: tokens.typography.fontFamily, fontSize: '18px', fontWeight: 700, color: tokens.colors.neutral12, lineHeight: 1.2 }}>
-                {item.title}
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5 }}>
-                <Badge variant={TYPE_BADGE_VARIANT[item.type]}>{TYPE_LABEL[item.type]}</Badge>
-                <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6 }}>
-                  {formatDate(item.updatedAt)}
-                </span>
-              </div>
-            </div>
-          </div>
-          <button onClick={onToggleFavorite} style={{
-            background: 'none', border: 'none', cursor: 'pointer', padding: 6,
-            fontSize: 20, color: item.favorite ? '#fdab43' : 'rgba(255,255,255,0.15)',
-            transition: 'color 0.15s', flexShrink: 0,
-          }}>
-            {item.favorite ? '★' : '☆'}
-          </button>
-        </div>
-      </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+       <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 28px 32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+          <span className="tile tile--lg"><TypeIcon type={item.type} size={19} color="currentColor" /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.title}
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+              {TYPE_LABEL[item.type]} · atualizado {formatDate(item.updatedAt)}
+            </p>
+          </div>
+          <FavoriteStar on={!!item.favorite} onClick={onToggleFavorite} size={18} />
+        </div>
 
         {/* Password */}
         {item.type === 'password' && (
           <Section>
             {item.url && <DetailRow label="URL">
-              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: '#4f98a3', fontFamily: tokens.typography.fontFamily, fontSize: '13px', wordBreak: 'break-all' }}>
+              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, wordBreak: 'break-all' }}>
                 {item.url}
               </a>
             </DetailRow>}
             {item.username && <SecretField label="Usuário" value={item.username} onCopy={onCopy} />}
             {item.password && <>
               <SecretField label="Senha" value={item.password} masked onCopy={onCopy} />
-              <div style={{ marginTop: 8 }}>
+              <div className="card__row">
                 <PasswordStrengthMeter password={item.password} />
               </div>
             </>}
@@ -880,10 +662,8 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
         {/* TOTP */}
         {item.type === 'totp' && item.totpSeed && (
           <Section>
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Código atual
-              </p>
+            <div className="card__row">
+              <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>Código de verificação</p>
               <TOTPDisplay seed={item.totpSeed} onCopy={code => onCopy(code, 'Código TOTP')} />
             </div>
             {item.username && <SecretField label="Usuário" value={item.username} onCopy={onCopy} />}
@@ -898,7 +678,7 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
           <Section>
             <SecretField label="Titular" value={item.card.cardholder} onCopy={onCopy} />
             <SecretField label="Número" value={item.card.number} masked maskFn={v => `•••• •••• •••• ${v.replace(/\s/g, '').slice(-4)}`} onCopy={onCopy} />
-            <div style={{ display: 'flex', gap: 16 }}>
+            <div className="card__split">
               <SecretField label="Validade" value={item.card.expiry} onCopy={onCopy} />
               <SecretField label="CVC" value={item.card.cvc} masked onCopy={onCopy} />
             </div>
@@ -908,19 +688,7 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
         {/* Note */}
         {item.type === 'note' && (
           <Section>
-            <div style={{
-              padding: '14px 16px',
-              background: 'rgba(155,125,232,0.05)',
-              border: '1px solid rgba(155,125,232,0.12)',
-              borderRadius: 12,
-              fontFamily: tokens.typography.fontFamily,
-              fontSize: '13px',
-              color: tokens.colors.neutral10,
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.7,
-              maxHeight: 320,
-              overflowY: 'auto',
-            }}>
+            <div className="card__row" style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.65, maxHeight: 360, overflowY: 'auto' }}>
               {item.note || <em style={{ color: tokens.colors.neutral6 }}>Nota vazia</em>}
             </div>
           </Section>
@@ -949,60 +717,39 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
 
         {/* Tags */}
         {item.tags.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Tags
-            </p>
+          <>
+            <p className="section-title">Tags</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {item.tags.map(tag => (
-                <span key={tag} style={{
-                  fontFamily: tokens.typography.fontFamily, fontSize: '11px',
-                  color: tokens.colors.neutral8, background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  padding: '3px 10px', borderRadius: 20,
-                }}>
-                  {tag}
-                </span>
-              ))}
+              {item.tags.map(tag => <span key={tag} className="tag">{tag}</span>)}
             </div>
-          </div>
+          </>
         )}
 
         {/* Attachments */}
         {(item.attachments?.length ?? 0) > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral6, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Anexos ({item.attachments!.length})
-            </p>
-            {item.attachments!.map(a => (
-              <div key={a.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 12px', marginBottom: 4,
-                background: 'rgba(79,152,163,0.05)', border: '1px solid rgba(79,152,163,0.12)',
-                borderRadius: 8,
-              }}>
-                <div>
-                  <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral10, margin: 0 }}>{a.name}</p>
-                  <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: tokens.colors.neutral6, margin: 0 }}>{(a.size / 1024).toFixed(1)} KB</p>
+          <>
+            <p className="section-title">Anexos</p>
+            <div className="card">
+              {item.attachments!.map(a => (
+                <div key={a.id} className="card__row" style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0 }}>{(a.size / 1024).toFixed(1)} KB</span>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
-        {/* Metadata */}
-        <div style={{ marginTop: 24, padding: '14px 16px', background: 'var(--bg-surface)', borderRadius: 10, border: '1px solid var(--border-dim)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <MetaField label="Criado" value={formatDate(item.createdAt)} />
-            <MetaField label="Atualizado" value={formatDate(item.updatedAt)} />
-            <MetaField label="Compartilhado" value={`${getActiveShares(item).length} usuário(s)`} />
-          </div>
-        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 20 }}>
+          Criado {formatDate(item.createdAt)}
+          {getActiveShares(item).length > 0 && ` · compartilhado com ${getActiveShares(item).length}`}
+        </p>
+       </div>
       </div>
 
       {/* Actions */}
-      <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-dim)', display: 'flex', gap: 8 }}>
-        <Button variant="secondary" onClick={onEdit}>Editar</Button>
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', gap: 8 }}>
+        <Button onClick={onEdit}>Editar</Button>
         <Button variant="secondary" onClick={onShare}>Compartilhar</Button>
         <AttachButton item={item} vault={vault} masterPassword={masterPassword} onVaultChange={onVaultChange} />
         <div style={{ marginLeft: 'auto' }}>
@@ -1037,49 +784,29 @@ const TOTPDisplay: React.FC<{ seed: string; onCopy: (code: string) => void }> = 
   const pct = remaining / 30;
   const r = 18;
   const circ = 2 * Math.PI * r;
-  const ringColor = remaining <= 5 ? '#e87da0' : remaining <= 10 ? '#fdab43' : '#6daa45';
+  const ringColor = remaining <= 5 ? 'var(--danger)' : 'var(--accent)';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-      <div>
-        <span style={{
-          fontFamily: tokens.typography.fontFamilyMono,
-          fontSize: '36px',
-          fontWeight: 700,
-          color: tokens.colors.neutral12,
-          letterSpacing: '0.25em',
-          display: 'block',
-          lineHeight: 1,
-        }}>
-          {code.slice(0, 3)} {code.slice(3)}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-        <svg width={48} height={48} viewBox="0 0 48 48">
-          <circle cx={24} cy={24} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={3} />
-          <circle
-            cx={24} cy={24} r={r} fill="none"
-            stroke={ringColor} strokeWidth={3}
-            strokeDasharray={`${circ}`}
-            strokeDashoffset={`${circ * (1 - pct)}`}
-            strokeLinecap="round"
-            transform="rotate(-90 24 24)"
-            style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
-          />
-          <text x={24} y={28} textAnchor="middle" fill={ringColor}
-            style={{ fontFamily: tokens.typography.fontFamilyMono, fontSize: '11px', fontWeight: 600 }}>
-            {remaining}
-          </text>
-        </svg>
-        <button onClick={() => onCopy(code)} style={{
-          padding: '4px 12px', borderRadius: 6,
-          background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-          color: tokens.colors.neutral9, fontFamily: tokens.typography.fontFamily, fontSize: '11px',
-          cursor: 'pointer', transition: 'all 0.15s',
-        }}>
-          Copiar
-        </button>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <span className="mono" style={{ fontSize: 28, fontWeight: 500, color: 'var(--text)', letterSpacing: '0.06em', lineHeight: 1, flex: 1 }}>
+        {code.slice(0, 3)} {code.slice(3)}
+      </span>
+      <svg width={32} height={32} viewBox="0 0 48 48" role="img" aria-label={`${remaining}s restantes`}>
+        <circle cx={24} cy={24} r={r} fill="none" stroke="var(--border)" strokeWidth={4} />
+        <circle
+          cx={24} cy={24} r={r} fill="none"
+          stroke={ringColor} strokeWidth={4}
+          strokeDasharray={`${circ}`}
+          strokeDashoffset={`${circ * (1 - pct)}`}
+          strokeLinecap="round"
+          transform="rotate(-90 24 24)"
+          style={{ transition: 'stroke-dashoffset 1s linear, stroke 0.3s' }}
+        />
+        <text x={24} y={29} textAnchor="middle" fill="var(--text-2)" style={{ fontSize: 15, fontWeight: 500 }}>
+          {remaining}
+        </text>
+      </svg>
+      <IconBtn label="Copiar código" onClick={() => onCopy(code)}><CopyIcon /></IconBtn>
     </div>
   );
 };
@@ -1092,79 +819,42 @@ function ItemCard({ item, selected, onClick, onToggleFavorite }: {
   onClick: () => void;
   onToggleFavorite: (e: React.MouseEvent) => void;
 }) {
-  const [hovered, setHovered] = useState(false);
-  const { tokens } = useTheme();
-
   return (
-    <div
+    <div role="option" tabIndex={0} aria-selected={selected} className="list-item" style={{ cursor: 'pointer' }}
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        padding: '10px 10px 10px 12px',
-        borderRadius: 10,
-        cursor: 'pointer',
-        background: selected ? `${TYPE_COLOR[item.type]}12` : hovered ? 'var(--bg-surface-hover)' : 'transparent',
-        border: `1px solid ${selected ? `${TYPE_COLOR[item.type]}35` : 'transparent'}`,
-        borderLeft: `3px solid ${selected ? TYPE_COLOR[item.type] : hovered ? 'var(--border-strong)' : 'var(--border-dim)'}`,
-        marginBottom: 3,
-        transition: 'all 0.13s',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-      }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
-      {/* Icon */}
-      <div style={{
-        width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-        background: `${TYPE_COLOR[item.type]}18`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <TypeIcon type={item.type} size={15} color={TYPE_COLOR[item.type]} />
-      </div>
-
-      {/* Text */}
+      <span className="tile"><TypeIcon type={item.type} size={15} color="currentColor" /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: tokens.typography.fontFamily, fontSize: '13px', fontWeight: 600,
-          color: tokens.colors.neutral11,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {item.title}
-        </div>
-        <div style={{
-          fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral7,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1,
-        }}>
-          {itemSubtitle(item)}
-        </div>
+        <div className="list-item__title">{item.title}</div>
+        <div className="list-item__sub">{itemSubtitle(item)}</div>
       </div>
-
-      {/* Favorite star */}
-      <span onClick={onToggleFavorite} style={{
-        fontSize: 13, cursor: 'pointer',
-        color: item.favorite ? '#fdab43' : tokens.colors.neutral5,
-        flexShrink: 0, transition: 'color 0.15s',
-      }}>
-        {item.favorite ? '★' : '☆'}
-      </span>
+      <FavoriteStar on={!!item.favorite} onClick={onToggleFavorite} size={13} />
     </div>
+  );
+}
+
+function FavoriteStar({ on, onClick, size }: { on: boolean; onClick: (e: React.MouseEvent) => void; size: number }) {
+  return (
+    <button type="button" className="star" aria-pressed={on} onClick={onClick}
+      aria-label={on ? 'Remover dos favoritos' : 'Adicionar aos favoritos'} title={on ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.7} strokeLinejoin="round">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    </button>
   );
 }
 
 // ─── Small UI helpers ─────────────────────────────────────────────────────────
 
 function Section({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>{children}</div>;
+  return <div className="card">{children}</div>;
 }
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
-  const { tokens } = useTheme();
   return (
-    <div>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: tokens.colors.neutral7, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        {label}
-      </p>
+    <div className="card__row">
+      <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 2 }}>{label}</p>
       {children}
     </div>
   );
@@ -1184,7 +874,6 @@ function SecretField({ label, value, masked = false, maskFn, onCopy }: {
   maskFn?: (v: string) => string;
   onCopy: (text: string, label: string) => void;
 }) {
-  const { tokens } = useTheme();
   const [revealed, setRevealed] = useState(false);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const display = masked && !revealed ? (maskFn ? maskFn(value) : partialMask(value)) : value;
@@ -1201,15 +890,14 @@ function SecretField({ label, value, masked = false, maskFn, onCopy }: {
 
   return (
     <DetailRow label={label}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{
-          fontFamily: masked && !revealed ? tokens.typography.fontFamily : tokens.typography.fontFamilyMono,
-          fontSize: '13px', color: tokens.colors.neutral10, flex: 1,
-          wordBreak: 'break-all', letterSpacing: masked && !revealed ? '0.1em' : 'normal',
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span className={masked && !revealed ? undefined : 'mono'} style={{
+          fontSize: 13, color: 'var(--text)', flex: 1, minHeight: 28, display: 'flex', alignItems: 'center',
+          wordBreak: 'break-all', letterSpacing: masked && !revealed ? '0.12em' : 'normal',
         }}>
           {display}
         </span>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
           {masked && (
             <IconBtn label={revealed ? 'Ocultar' : 'Revelar'} onClick={revealed ? () => setRevealed(false) : handleReveal}>
               {revealed ? <EyeOffIcon /> : <EyeIcon />}
@@ -1242,133 +930,44 @@ function AttachButton({ item, vault, masterPassword, onVaultChange }: { item: Va
   );
 }
 
-function MetaField({ label, value }: { label: string; value: string }) {
-  const { tokens } = useTheme();
-  return (
-    <div>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '10px', color: tokens.colors.neutral7, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
-      <p style={{ fontFamily: tokens.typography.fontFamily, fontSize: '12px', color: tokens.colors.neutral9, marginTop: 2 }}>{value}</p>
-    </div>
-  );
-}
-
-function NavBtn({ children, label, count, active, onClick, color, compact }: {
+function NavBtn({ children, label, count, active, onClick, compact }: {
   children: React.ReactNode; label: string; count?: number;
-  active: boolean; onClick: () => void; color?: string; compact?: boolean;
+  active: boolean; onClick: () => void; compact?: boolean;
 }) {
-  const [hov, setHov] = useState(false);
-  const { tokens } = useTheme();
-  const accent = color ?? '#4f98a3';
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        width: '100%', padding: '8px 12px', borderRadius: 9,
-        display: 'flex', alignItems: 'center', gap: 10, border: 'none',
-        borderLeft: `2px solid ${active ? accent : 'transparent'}`,
-        background: active
-          ? `linear-gradient(90deg, ${accent}1a 0%, ${accent}06 100%)`
-          : hov ? 'var(--bg-surface-hover)' : 'transparent',
-        cursor: 'pointer', textAlign: 'left', transition: 'all 0.14s',
-        color: active ? tokens.colors.neutral12 : hov ? tokens.colors.neutral9 : tokens.colors.neutral7,
-      }}
-    >
-      <span style={{
-        display: 'flex', flexShrink: 0,
-        color: active ? accent : hov ? tokens.colors.neutral8 : tokens.colors.neutral6,
-        transition: 'color 0.14s',
-      }}>
-        {children}
-      </span>
-      {!compact && <span style={{
-        fontFamily: tokens.typography.fontFamily, fontSize: '13px',
-        fontWeight: active ? 600 : 400, flex: 1, letterSpacing: active ? '0.01em' : 'normal',
-      }}>
-        {label}
-      </span>}
-      {!compact && count !== undefined && count > 0 && (
-        <span style={{
-          fontFamily: tokens.typography.fontFamilyMono, fontSize: '10px', fontWeight: 700,
-          color: active ? accent : tokens.colors.neutral6,
-          background: active ? `${accent}22` : 'var(--bg-surface)',
-          border: `1px solid ${active ? `${accent}35` : 'var(--border-dim)'}`,
-          borderRadius: 20, padding: '1px 7px', minWidth: 22, textAlign: 'center',
-          lineHeight: '16px',
-        }}>
-          {count}
-        </span>
-      )}
+    <button type="button" onClick={onClick} title={compact ? label : undefined} aria-label={compact ? label : undefined}
+      aria-current={active ? 'true' : undefined}
+      className={`nav-item${compact ? ' nav-item--compact' : ''}`}>
+      {children}
+      {!compact && <span className="nav-item__label">{label}</span>}
+      {!compact && count !== undefined && count > 0 && <span className="nav-item__count">{count}</span>}
     </button>
   );
 }
 
 function SidebarLabel({ children }: { children: React.ReactNode }) {
-  const { tokens } = useTheme();
-  return (
-    <div style={{
-      padding: '14px 12px 5px',
-      fontFamily: tokens.typography.fontFamily,
-      fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em',
-      color: tokens.colors.neutral6, textTransform: 'uppercase',
-    }}>
-      {children}
-    </div>
-  );
+  return <div className="sidebar__section">{children}</div>;
 }
 
-function LogoutButton({ onLogout }: { onLogout: () => void }) {
-  const [hov, setHov] = useState(false);
-  const { tokens } = useTheme();
-  return (
-    <button
-      onClick={onLogout}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      title="Bloquear vault"
-      style={{
-        background: hov ? 'rgba(209,99,167,0.12)' : 'var(--bg-surface)',
-        border: `1px solid ${hov ? 'rgba(209,99,167,0.25)' : 'var(--border-medium)'}`,
-        borderRadius: 7, padding: 6, cursor: 'pointer', flexShrink: 0,
-        color: hov ? '#e87da0' : tokens.colors.neutral7,
-        display: 'flex', transition: 'all 0.15s',
-      }}
-    >
-      <LogoutIcon />
-    </button>
-  );
-}
-
-function SearchField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { tokens } = useTheme();
+function SearchField({ value, onChange, inputRef }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement> }) {
   return (
     <div style={{ position: 'relative' }}>
-      <div style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: tokens.colors.neutral6, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', left: 11, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: 'var(--text-3)', pointerEvents: 'none' }}>
         <SearchIcon />
       </div>
       <input
+        ref={inputRef}
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder="Buscar..."
-        style={{
-          width: '100%', padding: '8px 10px 8px 32px',
-          background: 'var(--bg-input)',
-          border: '1px solid var(--border-medium)',
-          borderRadius: 8, color: tokens.colors.neutral11,
-          fontFamily: tokens.typography.fontFamily, fontSize: '13px', outline: 'none',
-          transition: 'border-color 0.15s',
-        }}
-        onFocus={e => { e.currentTarget.style.borderColor = 'rgba(79,152,163,0.5)'; }}
-        onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-medium)'; }}
+        placeholder="Buscar no vault"
+        aria-label="Buscar no vault"
+        className="input"
+        style={{ height: 34, paddingLeft: 32, paddingRight: 32, background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       />
       {value && (
-        <button onClick={() => onChange('')} style={{
-          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: tokens.colors.neutral7, padding: 2, display: 'flex',
-        }}>
+        <button type="button" onClick={() => onChange('')} aria-label="Limpar busca" className="icon-btn"
+          style={{ position: 'absolute', right: 4, top: 4, width: 26, height: 26 }}>
           <XIcon />
         </button>
       )}
@@ -1380,23 +979,8 @@ function PlusIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fil
 function SidebarFolderIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" /></svg>; }
 
 function IconBtn({ children, label, onClick }: { children: React.ReactNode; label: string; onClick: () => void }) {
-  const [hov, setHov] = useState(false);
-  const { tokens } = useTheme();
   return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: hov ? 'var(--bg-surface-hover)' : 'var(--bg-surface)',
-        border: '1px solid var(--border-dim)', cursor: 'pointer',
-        color: hov ? tokens.colors.neutral11 : tokens.colors.neutral8,
-        transition: 'all 0.13s',
-      }}
-    >
+    <button type="button" onClick={onClick} aria-label={label} title={label} className="icon-btn">
       {children}
     </button>
   );
@@ -1418,9 +1002,6 @@ function TypeIcon({ type, size, color }: { type: VaultItemType; size: number; co
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
-function LockIcon({ size = 18 }: { size?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="rgba(79,152,163,0.7)" strokeWidth={1.7}><rect x={3} y={11} width={18} height={11} rx={2} /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>;
-}
 function ImportIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>; }
 function ExportIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>; }
 function TrashIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /><line x1={10} y1={11} x2={10} y2={17} /><line x1={14} y1={11} x2={14} y2={17} /></svg>; }
@@ -1438,4 +1019,3 @@ function EyeIcon() { return <svg width={13} height={13} viewBox="0 0 24 24" fill
 function EyeOffIcon() { return <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" /></svg>; }
 function SearchIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><circle cx={11} cy={11} r={8} /><line x1={21} y1={21} x2={16.65} y2={16.65} /></svg>; }
 function XIcon() { return <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><line x1={18} y1={6} x2={6} y2={18} /><line x1={6} y1={6} x2={18} y2={18} /></svg>; }
-

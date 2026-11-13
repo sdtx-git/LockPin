@@ -8,9 +8,42 @@ struct RateLimiter {
     attempts: Mutex<Vec<Instant>>,
 }
 
+// Windows: ao lado do executável. Demais: diretório de dados do usuário (XDG).
+#[cfg(target_os = "windows")]
 fn app_base() -> PathBuf {
     let exe = std::env::current_exe().expect("failed to resolve executable path");
     exe.parent().expect("executable has no parent").to_path_buf()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn app_base() -> PathBuf {
+    use std::os::unix::fs::DirBuilderExt;
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").expect("HOME not set")).join(".local/share")
+        })
+        .join("lockpin");
+    let _ = std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&base);
+    base
+}
+
+// Grava com permissão 0600 em sistemas Unix.
+fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true).create(true).truncate(true).mode(0o600)
+            .open(path)?;
+        f.write_all(data)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, data)
+    }
 }
 
 fn vault_file_path(vault_id: &str) -> PathBuf {
@@ -46,6 +79,20 @@ fn anti_debug() {
             std::process::exit(1);
         }
     }
+    #[cfg(target_os = "linux")]
+    {
+        let traced = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find_map(|l| l.strip_prefix("TracerPid:"))
+                    .map(|v| v.trim() != "0")
+            })
+            .unwrap_or(false);
+        if traced {
+            std::process::exit(1);
+        }
+    }
 }
 
 fn prevent_crash_dumps() {
@@ -59,6 +106,11 @@ fn prevent_crash_dumps() {
             );
         }
     }
+    #[cfg(target_os = "linux")]
+    {
+        // sem core dump e sem ptrace attach
+        unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0); }
+    }
 }
 
 fn lock_memory(ptr: *const u8, len: usize) {
@@ -71,9 +123,9 @@ fn lock_memory(ptr: *const u8, len: usize) {
             )
         };
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(unix)]
     {
-        let _ = (ptr, len);
+        let _ = unsafe { libc::mlock(ptr as *const libc::c_void, len) };
     }
 }
 
@@ -135,7 +187,7 @@ fn read_vault(vault_id: String, rl: tauri::State<RateLimiter>) -> Result<String,
 #[tauri::command]
 fn write_vault(vault_id: String, rl: tauri::State<RateLimiter>, data: String) -> Result<(), String> {
     check_rate_limit(&rl.attempts, 60, Duration::from_secs(60))?;
-    std::fs::write(&vault_file_path(&vault_id), &data).map_err(|e| e.to_string())
+    write_private(&vault_file_path(&vault_id), data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -155,7 +207,7 @@ fn write_backup(vault_id: String, data: String, timestamp: String) -> Result<(),
     let bp = backups_path();
     std::fs::create_dir_all(&bp).map_err(|e| e.to_string())?;
     let path = bp.join(format!("vault-{}-{}.enc", vault_id, timestamp));
-    std::fs::write(&path, &data).map_err(|e| e.to_string())
+    write_private(&path, data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -200,7 +252,7 @@ fn attachment_write(item_id: String, attachment_id: String, data: Vec<u8>) -> Re
     let dir = attachments_dir().join(&item_id);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(format!("{}.enc", attachment_id));
-    std::fs::write(&path, &data).map_err(|e| e.to_string())
+    write_private(&path, &data).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -234,7 +286,7 @@ fn read_auth() -> Result<String, String> {
 
 #[tauri::command]
 fn write_auth(data: String) -> Result<(), String> {
-    std::fs::write(&vaults_auth_path(), &data).map_err(|e| e.to_string())
+    write_private(&vaults_auth_path(), data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -246,7 +298,36 @@ fn delete_auth(vault_id: String) -> Result<(), String> {
     let new_content: Vec<&str> = content.lines()
         .filter(|line| !line.starts_with(prefix.as_str()))
         .collect();
-    std::fs::write(&path, new_content.join("\n")).map_err(|e| e.to_string())
+    write_private(&path, new_content.join("\n").as_bytes()).map_err(|e| e.to_string())
+}
+
+// Fora do Windows o webview não trata downloads; grava direto em Downloads.
+// Retorna false quando o download deve seguir pelo próprio webview.
+#[tauri::command]
+fn save_download(app: tauri::AppHandle, filename: String, data: Vec<u8>) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = (app, filename, data);
+        Ok(false)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let name = std::path::Path::new(&filename);
+        let stem = name.file_stem().ok_or("invalid filename")?.to_string_lossy().to_string();
+        let ext = name.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+        // não sobrescreve arquivo existente
+        let mut path = dir.join(format!("{}{}", stem, ext));
+        let mut n = 1;
+        while path.exists() {
+            path = dir.join(format!("{} ({}){}", stem, n, ext));
+            n += 1;
+        }
+        std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+        Ok(true)
+    }
 }
 
 #[tauri::command]
@@ -261,6 +342,13 @@ fn windows_hello_available() -> Result<bool, String> {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn windows_hello_auth(_prompt: String) -> Result<bool, String> {
+    Err("Windows Hello not available on this platform".to_string())
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 fn windows_hello_auth(app: tauri::AppHandle, prompt: String) -> Result<bool, String> {
     use windows::Foundation::IAsyncOperation;
@@ -317,6 +405,7 @@ fn dpapi_protect(data: Vec<u8>) -> Result<String, String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = data;
         Err("DPAPI not available on this platform".to_string())
     }
 }
@@ -342,6 +431,7 @@ fn dpapi_unprotect(data: Vec<u8>) -> Result<Vec<u8>, String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = data;
         Err("DPAPI not available on this platform".to_string())
     }
 }
@@ -376,6 +466,7 @@ pub fn run() {
             attachment_read,
             attachment_delete,
             attachment_delete_all,
+            save_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
