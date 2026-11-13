@@ -64,13 +64,13 @@ function ToastContainer() {
     <div
       style={{
         position: 'fixed',
-        top: 16,
-        right: 16,
+        left: 16,
+        bottom: 96,
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
         zIndex: tokens.zIndex.toast,
-        maxWidth: '380px',
+        maxWidth: '320px',
       }}
     >
       {toasts.map((toast) => (

@@ -282,7 +282,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
           {!isRegister
             ? <button type="button" className="link-btn" onClick={() => setShowRecovery(true)}>Esqueci a senha mestra</button>
             : <span />}
-          <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{APP_NAME} {APP_VERSION}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{APP_NAME} {APP_VERSION}</span>
         </div>
 
         <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 28, lineHeight: 1.55 }}>

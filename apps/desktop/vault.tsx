@@ -478,9 +478,9 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       {/* Standalone Generator (sidebar button) */}
       <Modal open={showGenerator} onClose={() => setShowGenerator(false)} title="Gerador de senhas" size="sm">
         <PasswordGenerator onPasswordGenerated={pwd => {
-          setForm(f => ({ ...f, password: pwd, type: 'password' }));
           setShowGenerator(false);
-          setShowAddModal(true);
+          openAddModal();
+          setForm(f => ({ ...f, password: pwd, type: 'password' }));
         }} />
       </Modal>
 
