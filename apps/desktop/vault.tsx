@@ -12,7 +12,7 @@ import type { VaultItem, VaultItemType, VaultData } from '@core/vault/types';
 import { searchItems, addItem, updateItem, deleteItem, restoreItem, emptyTrash, addAttachment } from '@core/vault/storage';
 import { exportVault } from '@core/vault/storage';
 import { parseBitwardenCsv, parseChromeCsv, parseGenericCsv, importItems } from '@core/vault/import';
-import { formatDate } from '@shared/utils';
+import { formatDate, saveFile } from '@shared/utils';
 import { shareItem, revokeSharing, getActiveShares } from '@core/sharing/service';
 import { generateTOTP, getTOTPRemainingSeconds } from '@core/vault/totp';
 import { createAuditLog } from '@core/audit/logger';
@@ -681,12 +681,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
             if (!exportPassword) { addToast({ type: 'error', title: 'Defina uma senha' }); return; }
             try {
               const data = await exportVault(vault, exportPassword);
-              const blob = new Blob([data], { type: 'application/octet-stream' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url; a.download = `lockpin-export-${Date.now()}.enc`;
-              a.click();
-              URL.revokeObjectURL(url);
+              await saveFile(`lockpin-export-${Date.now()}.enc`, new TextEncoder().encode(data));
               setExportPassword('');
               setShowExport(false);
               addToast({ type: 'success', title: 'Vault exportado!' });

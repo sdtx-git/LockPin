@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { tokens } from '@ui/design-system/tokens';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { calculatePasswordStrength, strengthLabel } from '@shared/utils';
 import type { BaseComponentProps } from '@shared/types';
 
@@ -79,7 +80,7 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
   }, [length, useUpper, useLower, useDigits, useSymbols, noAmbig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(password);
+    await writeText(password);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };

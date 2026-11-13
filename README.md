@@ -9,7 +9,7 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows&logoColor=white)](https://github.com/microsoft/windows)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-0078D4)](https://github.com/sdtx-git/LockPin/releases)
 
 Your passwords never leave your machine. No accounts. No cloud sync. No telemetry.
 
@@ -35,12 +35,12 @@ Most password managers store your data in their cloud and charge a monthly fee f
 |---|---|
 | **Encryption** | AES-256-GCM with per-vault keys |
 | **Key derivation** | Argon2id (64 MB, 3 iterations) + PBKDF2-SHA-256 (600k iterations) |
-| **Windows Hello** | Biometric/PIN unlock via DPAPI-protected master key |
+| **Windows Hello** | Biometric/PIN unlock via DPAPI-protected master key (Windows only) |
 | **Duress password** | Opens a decoy empty vault without revealing the real one |
 | **Kill switch** | Destroys vault data on specific password entry |
 | **Recovery** | 12-word BIP39-style phrase encrypted separately from the vault |
 | **Auto-lock** | Configurable timeout with 30-second warning |
-| **Anti-debug** | Detects debugger presence on Windows, exits immediately |
+| **Anti-debug** | Detects debugger presence (Windows API / Linux `TracerPid`), exits immediately |
 | **Secure delete** | Overwrites vault files with random bytes before removal |
 | **Rate limiting** | Rust-side brute-force protection on all vault operations |
 | **CSP** | Strict Content Security Policy via Tauri's security layer |
@@ -126,8 +126,18 @@ This separation means the vault file itself contains no credentials — an attac
 
 ### Download (recommended)
 
-Pre-built Windows installers are available on the [Releases](https://github.com/sdtx-git/LockPin/releases) page.
-No build tools required — download the `.msi` or `.exe` and run it.
+Pre-built installers are available on the [Releases](https://github.com/sdtx-git/LockPin/releases) page.
+No build tools required:
+
+- **Linux** — `.deb`, `.rpm` or `.AppImage`
+- **Windows** — `.msi` or `.exe`
+
+### Data location
+
+| Platform | Path |
+|---|---|
+| Linux | `$XDG_DATA_HOME/lockpin` (default `~/.local/share/lockpin`), directory `0700`, files `0600` |
+| Windows | Next to the executable |
 
 ### Build from source
 
@@ -135,7 +145,13 @@ No build tools required — download the `.msi` or `.exe` and run it.
 
 - [Node.js 18+](https://nodejs.org)
 - [Rust 1.80+](https://rustup.rs)
-- [Tauri CLI prerequisites for Windows](https://tauri.app/start/prerequisites/)
+- [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform
+
+On Debian/Ubuntu:
+
+```bash
+sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev build-essential file
+```
 
 ```bash
 git clone https://github.com/sdtx-git/LockPin.git
@@ -149,7 +165,7 @@ The installer is output to `src-tauri/target/release/bundle/`.
 
 ### CI / Releases
 
-Pushing a tag triggers the GitHub Actions build pipeline, which compiles on a clean Windows runner and publishes the installer to GitHub Releases automatically:
+Pushing a tag triggers the GitHub Actions build pipeline, which compiles on clean Linux and Windows runners and publishes the installers to GitHub Releases automatically:
 
 ```bash
 git tag v3.0.1
@@ -187,7 +203,9 @@ LockPin's security rests on three pillars:
 
 ## Roadmap
 
-- [ ] macOS / Linux support
+- [x] Linux support
+- [ ] macOS support
+- [ ] Biometric unlock on Linux
 - [ ] Browser extension (autofill)
 - [ ] Encrypted export / import (Bitwarden-compatible format)
 - [ ] Password sharing via encrypted QR code

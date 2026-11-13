@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { tokens } from '@ui/design-system/tokens';
 import { useToast } from '@ui/components/organisms';
-import { generateId } from '@shared/utils';
+import { generateId, saveFile } from '@shared/utils';
 import {
   encryptVault, decryptVault,
   serializeVault, deserializeVault,
@@ -169,16 +169,14 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
     addToast({ type: 'info', title: 'Arquivo removido' });
   }, [unlocked, saveFiles, selectedFileId, addToast]);
 
-  const handleDownloadFile = useCallback((file: VaultFile) => {
+  const handleDownloadFile = useCallback(async (file: VaultFile) => {
     const byteChars = atob(file.data);
     const byteArr = new Uint8Array(byteChars.length);
     for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-    const blob = new Blob([byteArr], { type: file.mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = file.name; a.click();
-    URL.revokeObjectURL(url);
-    addToast({ type: 'info', title: `"${file.name}" baixado` });
+    try {
+      await saveFile(file.name, byteArr, file.mimeType);
+      addToast({ type: 'info', title: `"${file.name}" baixado` });
+    } catch { addToast({ type: 'error', title: 'Falha ao baixar arquivo' }); }
   }, [addToast]);
 
   // ── Drag & Drop ───────────────────────────────────────────────────────────────

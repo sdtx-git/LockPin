@@ -1,4 +1,15 @@
+import { invoke } from '@tauri-apps/api/core';
 import type { PasswordStrength } from '@core/vault/types';
+
+// Salva em Downloads pelo backend; no Windows cai no download do webview.
+export async function saveFile(name: string, bytes: Uint8Array, mimeType = 'application/octet-stream'): Promise<void> {
+  const saved = await invoke<boolean>('save_download', { filename: name, data: [...bytes] });
+  if (saved) return;
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mimeType }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function cn(...classes: (string | undefined | false | null)[]): string {
   return classes.filter(Boolean).join(' ');
