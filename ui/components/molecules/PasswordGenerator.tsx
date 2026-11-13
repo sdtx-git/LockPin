@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { tokens } from '@ui/design-system/tokens';
 import { Button } from '@ui/components/atoms';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { calculatePasswordStrength, strengthLabel } from '@shared/utils';
+import { CLIPBOARD_CLEAR_MS } from '@shared/constants';
 import type { BaseComponentProps } from '@shared/types';
 
 type PasswordGeneratorProps = BaseComponentProps & {
@@ -19,28 +20,30 @@ const AMBIGUOUS = 'Il1O0';
 const STRENGTH_COLORS = { weak: 'var(--danger)', fair: 'var(--warning)', strong: 'var(--success)', maximum: 'var(--success)' };
 const STRENGTH_WIDTH  = { weak: '25%', fair: '50%', strong: '75%', maximum: '100%' };
 
-function generate(length: number, upper: boolean, lower: boolean, digits: boolean, symbols: boolean, noAmbig: boolean): string {
-  let charset = '';
-  if (upper)   charset += UPPERCASE;
-  if (lower)   charset += LOWERCASE;
-  if (digits)  charset += DIGITS;
-  if (symbols) charset += SYMBOLS;
-  if (noAmbig) charset = charset.split('').filter(c => !AMBIGUOUS.includes(c)).join('');
-  if (!charset) charset = LOWERCASE + DIGITS;
+// Inteiro uniforme em [0, max) por amostragem com rejeição (sem viés de módulo).
+function randomInt(max: number): number {
+  const limit = Math.floor(0x100000000 / max) * max;
+  const buf = new Uint32Array(1);
+  do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+  return buf[0] % max;
+}
 
-  const bytes = new Uint8Array(length * 3);
-  crypto.getRandomValues(bytes);
-  const mask = (1 << Math.ceil(Math.log2(charset.length))) - 1;
-  let result = '';
-  let i = 0;
-  while (result.length < length && i < bytes.length - 1) {
-    const rand = (bytes[i] << 8) | bytes[i + 1];
-    i += 2;
-    const idx = rand & mask;
-    if (idx < charset.length) result += charset[idx];
+function charGroups(upper: boolean, lower: boolean, digits: boolean, symbols: boolean, noAmbig: boolean): string[] {
+  const groups = [upper && UPPERCASE, lower && LOWERCASE, digits && DIGITS, symbols && SYMBOLS].filter(Boolean) as string[];
+  if (!noAmbig) return groups;
+  return groups.map(g => g.split('').filter(c => !AMBIGUOUS.includes(c)).join(''));
+}
+
+function generate(length: number, groups: string[]): string {
+  const charset = groups.join('');
+  // um caractere de cada grupo marcado, o resto do conjunto todo
+  const chars = groups.slice(0, length).map(g => g[randomInt(g.length)]);
+  while (chars.length < length) chars.push(charset[randomInt(charset.length)]);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
   }
-  while (result.length < length) result += charset[bytes[i++ % bytes.length] % charset.length];
-  return result;
+  return chars.join('');
 }
 
 export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
@@ -56,46 +59,32 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
   const [password,     setPassword]     = useState('');
   const [copied,       setCopied]       = useState(false);
   const [spinning,     setSpinning]     = useState(false);
-  const mountRef = useRef(false);
 
-  const regenerate = useCallback((notify = true) => {
-    const pwd = generate(length, useUpper, useLower, useDigits, useSymbols, noAmbig);
-    setPassword(pwd);
-    if (notify) onPasswordGenerated?.(pwd);
-    return pwd;
-  }, [length, useUpper, useLower, useDigits, useSymbols, noAmbig, onPasswordGenerated]);
+  const groups = charGroups(useUpper, useLower, useDigits, useSymbols, noAmbig);
+  const enabledCount = [useUpper, useLower, useDigits, useSymbols].filter(Boolean).length;
 
-  // Generate once on mount (no notify)
+  // Gera ao montar e sempre que as opções mudam
   useEffect(() => {
-    if (mountRef.current) return;
-    mountRef.current = true;
-    const pwd = generate(length, useUpper, useLower, useDigits, useSymbols, noAmbig);
-    setPassword(pwd);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Regenerate when options change (after mount)
-  useEffect(() => {
-    if (!mountRef.current) return;
-    const pwd = generate(length, useUpper, useLower, useDigits, useSymbols, noAmbig);
-    setPassword(pwd);
+    setPassword(generate(length, groups));
   }, [length, useUpper, useLower, useDigits, useSymbols, noAmbig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCopy = async () => {
-    await writeText(password);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await writeText(password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => writeText('').catch(() => {}), CLIPBOARD_CLEAR_MS);
+    } catch { /* clipboard indisponível */ }
   };
 
   const handleRefresh = () => {
     setSpinning(true);
-    regenerate(true);
+    setPassword(generate(length, groups));
     setTimeout(() => setSpinning(false), 600);
   };
 
   const strength = password ? calculatePasswordStrength(password) : null;
-  const entropy = Math.round(password.length * Math.log2(
-    (useUpper ? 26 : 0) + (useLower ? 26 : 0) + (useDigits ? 10 : 0) + (useSymbols ? SYMBOLS.length : 0) || 36
-  ));
+  const entropy = Math.round(password.length * Math.log2(groups.join('').length));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 12 : 16 }}>
@@ -191,10 +180,10 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
 
       {/* Options */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: compact ? 6 : 8 }}>
-        <ToggleChip label="Maiúsculas (A-Z)" on={useUpper} onChange={setUseUpper} />
-        <ToggleChip label="Minúsculas (a-z)" on={useLower} onChange={setUseLower} />
-        <ToggleChip label="Números (0-9)" on={useDigits} onChange={setUseDigits} />
-        <ToggleChip label="Símbolos (!@#)" on={useSymbols} onChange={setUseSymbols} />
+        <ToggleChip label="Maiúsculas (A-Z)" on={useUpper} onChange={setUseUpper} disabled={useUpper && enabledCount === 1} />
+        <ToggleChip label="Minúsculas (a-z)" on={useLower} onChange={setUseLower} disabled={useLower && enabledCount === 1} />
+        <ToggleChip label="Números (0-9)" on={useDigits} onChange={setUseDigits} disabled={useDigits && enabledCount === 1} />
+        <ToggleChip label="Símbolos (!@#)" on={useSymbols} onChange={setUseSymbols} disabled={useSymbols && enabledCount === 1} />
         <div style={{ gridColumn: 'span 2' }}>
           <ToggleChip label="Evitar caracteres parecidos (I, l, 1, O, 0)" on={noAmbig} onChange={setNoAmbig} />
         </div>
@@ -212,11 +201,10 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function ToggleChip({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+function ToggleChip({ label, on, onChange, disabled }: { label: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer', padding: '4px 0' }}>
-      <input type="checkbox" checked={on} onChange={e => onChange(e.target.checked)}
-        style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+    <label className="check" title={disabled ? 'Pelo menos um conjunto precisa ficar marcado' : undefined}>
+      <input type="checkbox" checked={on} disabled={disabled} onChange={e => onChange(e.target.checked)} />
       {label}
     </label>
   );

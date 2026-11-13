@@ -275,7 +275,8 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
 
           {/* Inline generator */}
           {showGenerator && (
-            <div style={{ padding: 14, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <div ref={el => el?.scrollIntoView({ block: 'nearest' })}
+              style={{ padding: 14, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               <PasswordGenerator
                 compact
                 onPasswordGenerated={pwd => set('password', pwd)}
