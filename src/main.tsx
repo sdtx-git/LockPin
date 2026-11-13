@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource/ibm-plex-sans/400.css';
+import '@fontsource/ibm-plex-sans/500.css';
+import '@fontsource/ibm-plex-sans/600.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
+import '@ui/design-system/global.css';
 import { ToastProvider, useToast } from '@ui/components/organisms';
 import { ThemeProvider } from '@ui/contexts/ThemeContext';
 import { LoginScreen } from '@apps/desktop/login';

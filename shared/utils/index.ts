@@ -65,10 +65,10 @@ export function strengthLabel(strength: PasswordStrength): string {
 
 export function strengthColor(strength: PasswordStrength): string {
   switch (strength) {
-    case 'weak': return '#d163a7';
-    case 'fair': return '#fdab43';
-    case 'strong': return '#6daa45';
-    case 'maximum': return '#4f98a3';
+    case 'weak': return 'var(--danger)';
+    case 'fair': return 'var(--warning)';
+    case 'strong': return 'var(--success)';
+    case 'maximum': return 'var(--accent)';
   }
 }
 

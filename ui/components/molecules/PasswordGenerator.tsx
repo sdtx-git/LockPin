@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { tokens } from '@ui/design-system/tokens';
+import { Button } from '@ui/components/atoms';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { calculatePasswordStrength, strengthLabel } from '@shared/utils';
 import type { BaseComponentProps } from '@shared/types';
@@ -15,7 +16,7 @@ const DIGITS    = '0123456789';
 const SYMBOLS   = '!@#$%^&*()_+-=[]{}|;:,.<>?';
 const AMBIGUOUS = 'Il1O0';
 
-const STRENGTH_COLORS = { weak: '#d163a7', fair: '#fdab43', strong: '#4f98a3', maximum: '#6daa45' };
+const STRENGTH_COLORS = { weak: 'var(--danger)', fair: 'var(--warning)', strong: 'var(--success)', maximum: 'var(--success)' };
 const STRENGTH_WIDTH  = { weak: '25%', fair: '50%', strong: '75%', maximum: '100%' };
 
 function generate(length: number, upper: boolean, lower: boolean, digits: boolean, symbols: boolean, noAmbig: boolean): string {
@@ -101,15 +102,15 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
 
       {/* Password display */}
       <div style={{
-        borderRadius: 12, overflow: 'hidden',
-        border: '1px solid rgba(255,255,255,0.07)',
-        background: 'rgba(255,255,255,0.03)',
+        borderRadius: 8, overflow: 'hidden',
+        border: '1px solid var(--border)',
+        background: 'var(--fill)',
       }}>
         {/* Generated password */}
         <div style={{
           padding: compact ? '12px 14px' : '16px 18px',
           display: 'flex', alignItems: 'center', gap: 12,
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          borderBottom: '1px solid var(--border)',
         }}>
           <span style={{
             fontFamily: tokens.typography.fontFamilyMono,
@@ -142,16 +143,16 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
         {/* Strength bar */}
         {strength && (
           <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.07)', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ flex: 1, height: 3, background: 'var(--fill-hover)', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{
                 height: '100%',
                 width: STRENGTH_WIDTH[strength],
-                background: `linear-gradient(90deg, ${STRENGTH_COLORS[strength]}80, ${STRENGTH_COLORS[strength]})`,
+                background: STRENGTH_COLORS[strength],
                 borderRadius: 2,
                 transition: 'width 0.3s ease, background 0.3s ease',
               }} />
             </div>
-            <span style={{ fontFamily: tokens.typography.fontFamily, fontSize: '11px', color: STRENGTH_COLORS[strength], flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-2)', flexShrink: 0 }}>
               {strengthLabel(strength)}
             </span>
             {!compact && (
@@ -172,8 +173,7 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
           <span style={{
             fontFamily: tokens.typography.fontFamilyMono, fontSize: '13px',
             fontWeight: 600, color: tokens.colors.neutral10,
-            background: 'rgba(79,152,163,0.12)', border: '1px solid rgba(79,152,163,0.2)',
-            padding: '1px 8px', borderRadius: 6,
+
           }}>
             {length}
           </span>
@@ -191,30 +191,20 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
 
       {/* Options */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: compact ? 6 : 8 }}>
-        <ToggleChip label="A-Z Maiúsculas" on={useUpper} onChange={setUseUpper} />
-        <ToggleChip label="a-z Minúsculas" on={useLower} onChange={setUseLower} />
-        <ToggleChip label="0-9 Números"    on={useDigits} onChange={setUseDigits} />
-        <ToggleChip label="!@# Símbolos"   on={useSymbols} onChange={setUseSymbols} />
+        <ToggleChip label="Maiúsculas (A-Z)" on={useUpper} onChange={setUseUpper} />
+        <ToggleChip label="Minúsculas (a-z)" on={useLower} onChange={setUseLower} />
+        <ToggleChip label="Números (0-9)" on={useDigits} onChange={setUseDigits} />
+        <ToggleChip label="Símbolos (!@#)" on={useSymbols} onChange={setUseSymbols} />
         <div style={{ gridColumn: 'span 2' }}>
-          <ToggleChip label="Excluir ambíguos (I, l, 1, O, 0)" on={noAmbig} onChange={setNoAmbig} />
+          <ToggleChip label="Evitar caracteres parecidos (I, l, 1, O, 0)" on={noAmbig} onChange={setNoAmbig} />
         </div>
       </div>
 
       {/* Use button */}
       {onPasswordGenerated && (
-        <button
-          onClick={() => onPasswordGenerated(password)}
-          style={{
-            width: '100%', padding: '10px', borderRadius: 10,
-            background: 'rgba(79,152,163,0.15)', border: '1px solid rgba(79,152,163,0.3)',
-            color: '#4f98a3', fontFamily: tokens.typography.fontFamily,
-            fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(79,152,163,0.25)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(79,152,163,0.15)'; }}
-        >
+        <Button variant="secondary" fullWidth onClick={() => onPasswordGenerated(password)}>
           Usar esta senha
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -224,34 +214,11 @@ export const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
 
 function ToggleChip({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!on)}
-      style={{
-        padding: '7px 10px', borderRadius: 8, cursor: 'pointer',
-        border: `1px solid ${on ? 'rgba(79,152,163,0.35)' : 'rgba(255,255,255,0.07)'}`,
-        background: on ? 'rgba(79,152,163,0.12)' : 'rgba(255,255,255,0.03)',
-        display: 'flex', alignItems: 'center', gap: 7, textAlign: 'left',
-        transition: 'all 0.15s',
-      }}
-    >
-      <div style={{
-        width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-        border: `1.5px solid ${on ? '#4f98a3' : 'rgba(255,255,255,0.2)'}`,
-        background: on ? '#4f98a3' : 'transparent',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'all 0.13s',
-      }}>
-        {on && <svg width={8} height={8} viewBox="0 0 12 12" fill="none" stroke="#000" strokeWidth={2.2}><polyline points="2 6 5 9 10 3"/></svg>}
-      </div>
-      <span style={{
-        fontFamily: tokens.typography.fontFamily, fontSize: '11px',
-        color: on ? tokens.colors.neutral10 : tokens.colors.neutral7,
-        transition: 'color 0.13s', lineHeight: 1.3,
-      }}>
-        {label}
-      </span>
-    </button>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer', padding: '4px 0' }}>
+      <input type="checkbox" checked={on} onChange={e => onChange(e.target.checked)}
+        style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+      {label}
+    </label>
   );
 }
 
@@ -260,21 +227,9 @@ function IconBtn({ children, label, onClick, active, style: extraStyle }: {
   onClick: () => void; active?: boolean;
   style?: React.CSSProperties;
 }) {
-  const [hov, setHov] = useState(false);
   return (
-    <button
-      type="button" onClick={onClick} aria-label={label} title={label}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        width: 30, height: 30, borderRadius: 8, border: 'none',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: active ? 'rgba(109,170,69,0.18)' : hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-        color: active ? '#6daa45' : hov ? tokens.colors.neutral11 : tokens.colors.neutral7,
-        cursor: 'pointer', transition: 'all 0.13s',
-        ...extraStyle,
-      }}
-    >
+    <button type="button" onClick={onClick} aria-label={label} title={label} className="icon-btn"
+      style={{ color: active ? 'var(--success)' : undefined, ...extraStyle }}>
       {children}
     </button>
   );
