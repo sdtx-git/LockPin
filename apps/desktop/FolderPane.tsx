@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { useToast, Modal } from '@ui/components/organisms';
+import { useToast, Modal, useConfirm } from '@ui/components/organisms';
 import { Button } from '@ui/components/atoms';
 import { generateId, saveFile } from '@shared/utils';
 import {
@@ -43,6 +43,7 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
   const [draggingOver, setDraggingOver]         = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
+  const [confirm, confirmDialog] = useConfirm();
 
   const liveFolder = selectedId ? folders.find(f => f.id === selectedId) ?? null : null;
   const liveFolderState = selectedId ? unlocked.get(selectedId) ?? null : null;
@@ -96,12 +97,15 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
     addToast({ type: 'success', title: 'Pasta renomeada!' });
   }, [folders, onChange, addToast]);
 
-  const handleDeleteFolder = useCallback((id: string) => {
+  const handleDeleteFolder = useCallback(async (id: string) => {
+    const folder = folders.find(f => f.id === id);
+    const ok = await confirm({ title: `Excluir "${folder?.name ?? 'pasta'}"?`, message: 'A pasta e todos os arquivos dentro dela serão apagados definitivamente. Não dá para desfazer.', confirmLabel: 'Excluir pasta' });
+    if (!ok) return;
     onChange(folders.filter(f => f.id !== id));
     if (selectedId === id) { setSelectedId(null); setSelectedFileId(null); }
     setUnlocked(prev => { const n = new Map(prev); n.delete(id); return n; });
     addToast({ type: 'info', title: 'Pasta removida' });
-  }, [folders, onChange, selectedId, addToast]);
+  }, [folders, onChange, selectedId, addToast, confirm]);
 
   // ── Unlock ────────────────────────────────────────────────────────────────────
 
@@ -163,11 +167,13 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
   const handleDeleteFile = useCallback(async (folderId: string, fileId: string) => {
     const state = unlocked.get(folderId);
     if (!state) return;
+    const name = state.files.find(f => f.id === fileId)?.name ?? 'arquivo';
+    if (!await confirm({ title: `Excluir "${name}"?`, message: 'O arquivo será apagado definitivamente desta pasta. Não dá para desfazer.', confirmLabel: 'Excluir arquivo' })) return;
     const files = state.files.filter(f => f.id !== fileId);
     await saveFiles(folderId, files, state.password);
     if (selectedFileId === fileId) setSelectedFileId(null);
     addToast({ type: 'info', title: 'Arquivo removido' });
-  }, [unlocked, saveFiles, selectedFileId, addToast]);
+  }, [unlocked, saveFiles, selectedFileId, addToast, confirm]);
 
   const handleDownloadFile = useCallback(async (file: VaultFile) => {
     const byteChars = atob(file.data);
@@ -299,6 +305,7 @@ export const FolderPane: React.FC<FolderPaneProps> = ({ folders, onChange }) => 
       </div>
 
       {/* ── Dialogs ── */}
+      {confirmDialog}
       {unlockTarget && (
         <UnlockDialog
           folder={unlockTarget}

@@ -33,7 +33,13 @@ export async function deleteVaultData(vaultId: string): Promise<void> {
   await invoke('delete_vault', { vaultId });
 }
 
+const BACKUP_INTERVAL_MS = 10 * 60 * 1000;
+const lastBackup = new Map<string, number>();
+
 async function autoBackup(vault: VaultData, masterPassword: string, vaultId: string): Promise<void> {
+  const now = Date.now();
+  if (now - (lastBackup.get(vaultId) ?? 0) < BACKUP_INTERVAL_MS) return;
+  lastBackup.set(vaultId, now);
   try {
     const json = JSON.stringify(vault);
     const data = new TextEncoder().encode(json).buffer;
