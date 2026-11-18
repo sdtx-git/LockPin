@@ -100,8 +100,15 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && e.target instanceof HTMLInputElement) onSave();
-    if (e.key === 'Escape') onClose();
   };
+
+  // Esc fecha mesmo se o foco estiver fora do painel
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); onClose(); } };
+    document.addEventListener('keydown', onEsc);
+    return () => document.removeEventListener('keydown', onEsc);
+  }, [open, onClose]);
 
   if (!open) return null;
 
