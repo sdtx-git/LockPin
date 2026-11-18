@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import '@fontsource/ibm-plex-sans/400.css';
-import '@fontsource/ibm-plex-sans/500.css';
-import '@fontsource/ibm-plex-sans/600.css';
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/ibm-plex-sans/latin-400.css';
+import '@fontsource/ibm-plex-sans/latin-500.css';
+import '@fontsource/ibm-plex-sans/latin-600.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@ui/design-system/global.css';
 import { ToastProvider, useToast } from '@ui/components/organisms';
 import { ThemeProvider } from '@ui/contexts/ThemeContext';
@@ -65,12 +64,33 @@ function App() {
     setHasVault(true);
   }, []);
 
-  const handleVaultChange = useCallback(async (newVault: VaultData) => {
+  // Grava em fila: um save por vez e só o estado mais recente (evita gravação fora de ordem)
+  const pendingRef = useRef<VaultData | null>(null);
+  const savingRef = useRef(false);
+
+  const flushSaves = useCallback(async (password: string, id: string) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      while (pendingRef.current) {
+        const next = pendingRef.current;
+        pendingRef.current = null;
+        await saveVault(next, password, id).catch(() => {
+          addToast({ type: 'error', title: 'Não foi possível salvar', description: 'A alteração será gravada na próxima mudança.' });
+        });
+      }
+    } finally {
+      savingRef.current = false;
+    }
+  }, [addToast]);
+
+  const handleVaultChange = useCallback((newVault: VaultData) => {
     setVault(newVault);
     if (masterPassword && vaultId) {
-      await saveVault(newVault, masterPassword, vaultId);
+      pendingRef.current = newVault;
+      flushSaves(masterPassword, vaultId);
     }
-  }, [masterPassword, vaultId]);
+  }, [masterPassword, vaultId, flushSaves]);
 
   const handleLogout = useCallback(() => {
     if (passwordRef.current) {
