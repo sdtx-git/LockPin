@@ -4,7 +4,7 @@ import { useDebounce } from '@ui/contexts/useDebounce';
 import { useKeyboard } from '@ui/contexts/useKeyboard';
 import { PasswordGenerator, PasswordStrengthMeter } from '@ui/components/molecules';
 import { Button, Logo } from '@ui/components/atoms';
-import { Modal } from '@ui/components/organisms';
+import { Modal, useConfirm } from '@ui/components/organisms';
 import { useToast } from '@ui/components/organisms';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import type { VaultItem, VaultItemType, VaultData } from '@core/vault/types';
@@ -87,11 +87,25 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
   const { addToast } = useToast();
   const { theme, toggle: toggleTheme } = useTheme();
 
+  const [confirm, confirmDialog] = useConfirm();
+  const modalOpen = () => !!document.querySelector('[role=dialog]');
+
   useKeyboard([
-    { key: 'f', ctrl: true, handler: () => { setFilter('all'); searchRef.current?.focus(); } },
-    { key: 'n', ctrl: true, handler: () => { openAddModal(); } },
-    { key: 'Escape', handler: () => { if (selectedItem) setSelectedItem(null); } },
+    { key: 'f', ctrl: true, handler: () => { if (filter === 'folders' || filter === 'trash') setFilter('all'); searchRef.current?.focus(); searchRef.current?.select(); } },
+    { key: 'n', ctrl: true, handler: () => { if (!modalOpen()) openAddModal(); } },
+    { key: 'l', ctrl: true, handler: onLogout },
+    { key: 'Escape', handler: () => { if (!modalOpen() && selectedItem) setSelectedItem(null); } },
   ]);
+
+  // contagens do menu em uma única passada
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: vault.items.length, favorites: 0 };
+    for (const i of vault.items) {
+      c[i.type] = (c[i.type] ?? 0) + 1;
+      if (i.favorite) c.favorites++;
+    }
+    return c;
+  }, [vault.items]);
 
   const filtered = useMemo(() => {
     if (filter === 'trash') return [] as VaultItem[];
@@ -100,6 +114,20 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
     else if (filter !== 'all') items = items.filter(i => i.type === filter);
     return items;
   }, [vault, debouncedSearch, filter]);
+
+  const moveSelection = useCallback((delta: number) => {
+    if (filtered.length === 0) return;
+    const idx = selectedItem ? filtered.findIndex(i => i.id === selectedItem.id) : -1;
+    const next = filtered[Math.min(filtered.length - 1, Math.max(0, idx + delta))];
+    setSelectedItem(next);
+    document.getElementById(`item-${next.id}`)?.scrollIntoView({ block: 'nearest' });
+  }, [filtered, selectedItem]);
+
+  const onListKey = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); }
+    else if (e.key === 'Enter' && selectedItem && e.target === searchRef.current) { e.preventDefault(); openEditModalRef.current(selectedItem); }
+  }, [moveSelection, selectedItem]);
 
   // Keep selectedItem in sync with vault updates
   useEffect(() => {
@@ -122,6 +150,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
     setForm(itemToForm(item));
     setShowAddModal(true);
   }, []);
+  const openEditModalRef = useRef(openEditModal);
 
   const closeAddModal = useCallback(() => {
     setShowAddModal(false);
@@ -134,7 +163,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
   const copy = useCallback(async (text: string, label: string) => {
     try {
       await writeText(text);
-      addToast({ type: 'info', title: `${label} copiado!` });
+      addToast({ type: 'info', title: `${label}: copiado`, description: `A área de transferência será limpa em ${CLIPBOARD_CLEAR_MS / 1000}s.`, duration: 2500 });
       setTimeout(() => writeText('').catch(() => {}), CLIPBOARD_CLEAR_MS);
     } catch {
       addToast({ type: 'error', title: 'Falha ao copiar' });
@@ -186,7 +215,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
     newVault = { ...newVault, auditLogs: [...newVault.auditLogs, audit] };
     onVaultChange(newVault);
     if (selectedItem?.id === itemId) setSelectedItem(null);
-    addToast({ type: 'info', title: 'Item removido' });
+    addToast({ type: 'info', title: 'Movido para a lixeira' });
   }, [vault, selectedItem, onVaultChange, addToast]);
 
   // ── Share ────────────────────────────────────────────────────────────────────
@@ -255,60 +284,52 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
         </div>
 
         <nav style={{ flex: 1, padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
-          <NavBtn label="Todos os itens" count={vault.items.length} active={filter === 'all'} onClick={() => setFilter('all')} compact={sidebarCollapsed}>
+          <NavBtn label="Todos os itens" count={counts.all} active={filter === 'all'} onClick={() => setFilter('all')} compact={sidebarCollapsed}>
             <GridIcon />
           </NavBtn>
-          <NavBtn label="Favoritos" count={vault.items.filter(i => i.favorite).length} active={filter === 'favorites'} onClick={() => setFilter('favorites')} compact={sidebarCollapsed}>
+          <NavBtn label="Favoritos" count={counts.favorites} active={filter === 'favorites'} onClick={() => setFilter('favorites')} compact={sidebarCollapsed}>
             <StarIcon />
           </NavBtn>
-          <NavBtn label="Pastas seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => setFilter('folders')} compact={sidebarCollapsed}>
-            <SidebarFolderIcon />
-          </NavBtn>
-          <NavBtn label="Lixeira" count={vault.trash?.length ?? 0} active={filter === 'trash'} onClick={() => setFilter(filter === 'trash' ? 'all' : 'trash')} compact={sidebarCollapsed}>
-            <TrashIcon />
-          </NavBtn>
 
-          {!sidebarCollapsed && <SidebarLabel>Tipos</SidebarLabel>}
+          <div className="sidebar__divider" />
 
-          <NavBtn label="Senhas" count={vault.items.filter(i => i.type === 'password').length} active={filter === 'password'} onClick={() => setFilter('password')} compact={sidebarCollapsed}>
+          <NavBtn label="Senhas" count={counts.password} active={filter === 'password'} onClick={() => setFilter('password')} compact={sidebarCollapsed}>
             <KeyIcon />
           </NavBtn>
-          <NavBtn label="Autenticador" count={vault.items.filter(i => i.type === 'totp').length} active={filter === 'totp'} onClick={() => setFilter('totp')} compact={sidebarCollapsed}>
+          <NavBtn label="Autenticador" count={counts.totp} active={filter === 'totp'} onClick={() => setFilter('totp')} compact={sidebarCollapsed}>
             <ShieldClockIcon />
           </NavBtn>
-          <NavBtn label="Cartões" count={vault.items.filter(i => i.type === 'card').length} active={filter === 'card'} onClick={() => setFilter('card')} compact={sidebarCollapsed}>
+          <NavBtn label="Cartões" count={counts.card} active={filter === 'card'} onClick={() => setFilter('card')} compact={sidebarCollapsed}>
             <CardIcon />
           </NavBtn>
-          <NavBtn label="Notas" count={vault.items.filter(i => i.type === 'note').length} active={filter === 'note'} onClick={() => setFilter('note')} compact={sidebarCollapsed}>
+          <NavBtn label="Notas" count={counts.note} active={filter === 'note'} onClick={() => setFilter('note')} compact={sidebarCollapsed}>
             <NoteIcon />
           </NavBtn>
-          <NavBtn label="Identidades" count={vault.items.filter(i => i.type === 'identity').length} active={filter === 'identity'} onClick={() => setFilter('identity')} compact={sidebarCollapsed}>
+          <NavBtn label="Identidades" count={counts.identity} active={filter === 'identity'} onClick={() => setFilter('identity')} compact={sidebarCollapsed}>
             <PersonIcon />
           </NavBtn>
 
-          {!sidebarCollapsed && <SidebarLabel>Ferramentas</SidebarLabel>}
+          <div className="sidebar__divider" />
 
-          <NavBtn label="Gerador de senhas" active={false} onClick={() => setShowGenerator(true)} compact={sidebarCollapsed}>
-            <WandIcon />
+          <NavBtn label="Pastas seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => setFilter('folders')} compact={sidebarCollapsed}>
+            <SidebarFolderIcon />
           </NavBtn>
-          <NavBtn label="Importar" active={false} onClick={() => setShowImport(true)} compact={sidebarCollapsed}>
-            <ImportIcon />
-          </NavBtn>
-          <NavBtn label="Exportar" active={false} onClick={() => setShowExport(true)} compact={sidebarCollapsed}>
-            <ExportIcon />
+          <NavBtn label="Lixeira" count={vault.trash?.length ?? 0} active={filter === 'trash'} onClick={() => setFilter('trash')} compact={sidebarCollapsed}>
+            <TrashIcon />
           </NavBtn>
         </nav>
 
-        <div style={{ padding: 8, borderTop: '1px solid var(--sidebar-border)', display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <NavBtn label={theme === 'dark' ? 'Tema claro' : 'Tema escuro'} active={false} onClick={toggleTheme} compact={sidebarCollapsed}>
+        <div className={`sidebar__tools${sidebarCollapsed ? ' sidebar__tools--compact' : ''}`}>
+          <ToolBtn label="Gerador de senhas" onClick={() => setShowGenerator(true)}><WandIcon /></ToolBtn>
+          <ToolBtn label="Importar" onClick={() => setShowImport(true)}><ImportIcon /></ToolBtn>
+          <ToolBtn label="Exportar" onClick={() => setShowExport(true)}><ExportIcon /></ToolBtn>
+          <ToolBtn label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={toggleTheme}>
             {theme === 'dark'
-              ? <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={12} cy={12} r={5} /><line x1={12} y1={1} x2={12} y2={3} /><line x1={12} y1={21} x2={12} y2={23} /><line x1={4.22} y1={4.22} x2={5.64} y2={5.64} /><line x1={18.36} y1={18.36} x2={19.78} y2={19.78} /><line x1={1} y1={12} x2={3} y2={12} /><line x1={21} y1={12} x2={23} y2={12} /><line x1={4.22} y1={19.78} x2={5.64} y2={18.36} /><line x1={18.36} y1={5.64} x2={19.78} y2={4.22} /></svg>
-              : <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
+              ? <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={12} cy={12} r={5} /><line x1={12} y1={1} x2={12} y2={3} /><line x1={12} y1={21} x2={12} y2={23} /><line x1={4.22} y1={4.22} x2={5.64} y2={5.64} /><line x1={18.36} y1={18.36} x2={19.78} y2={19.78} /><line x1={1} y1={12} x2={3} y2={12} /><line x1={21} y1={12} x2={23} y2={12} /><line x1={4.22} y1={19.78} x2={5.64} y2={18.36} /><line x1={18.36} y1={5.64} x2={19.78} y2={4.22} /></svg>
+              : <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
             }
-          </NavBtn>
-          <NavBtn label="Bloquear vault" active={false} onClick={onLogout} compact={sidebarCollapsed}>
-            <LogoutIcon />
-          </NavBtn>
+          </ToolBtn>
+          <ToolBtn label="Bloquear vault (Ctrl+L)" onClick={onLogout}><LogoutIcon /></ToolBtn>
         </div>
       </aside>
 
@@ -325,7 +346,11 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, minHeight: 34 }}>
               <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)' }}>Lixeira</h2>
               {(vault.trash?.length ?? 0) > 0 && (
-                <Button variant="danger" onClick={async () => { const v = await emptyTrash(vault); onVaultChange(v); addToast({ type: 'info', title: 'Lixeira esvaziada' }); }}>
+                <Button variant="danger" onClick={async () => {
+                  const ok = await confirm({ title: 'Esvaziar lixeira?', message: `${vault.trash.length} ${vault.trash.length === 1 ? 'item será apagado' : 'itens serão apagados'} definitivamente, com seus anexos. Não dá para desfazer.`, confirmLabel: 'Esvaziar lixeira' });
+                  if (!ok) return;
+                  const v = await emptyTrash(vault); onVaultChange(v); addToast({ type: 'info', title: 'Lixeira esvaziada' });
+                }}>
                   Esvaziar lixeira
                 </Button>
               )}
@@ -359,12 +384,12 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
             <div style={{ padding: '12px 12px 8px' }}>
-              <SearchField value={search} onChange={setSearch} inputRef={searchRef} />
+              <SearchField value={search} onChange={setSearch} inputRef={searchRef} onKeyDown={onListKey} />
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 2px 0' }}>
                 {FILTER_LABEL[filter] ?? 'Itens'} · {filtered.length}
               </p>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
+            <div role="listbox" aria-label="Itens do vault" onKeyDown={onListKey} style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: '36px 16px', textAlign: 'center' }}>
                   <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>
@@ -379,8 +404,9 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
                   <ItemCard
                     key={item.id} item={item}
                     selected={selectedItem?.id === item.id}
-                    onClick={() => setSelectedItem(selectedItem?.id === item.id ? null : item)}
-                    onToggleFavorite={(e) => { e.stopPropagation(); handleToggleFavorite(item.id); }}
+                    onSelect={setSelectedItem}
+                    onToggleFavorite={handleToggleFavorite}
+                    onCopy={copy}
                   />
                 ))
               )}
@@ -414,6 +440,8 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       )}
 
       {/* ══ Dialogs ══════════════════════════════════════════════════════════════ */}
+
+      {confirmDialog}
 
       {/* Item add / edit */}
       <VaultItemDialog
@@ -748,12 +776,15 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
       </div>
 
       {/* Actions */}
-      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', gap: 8 }}>
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: 4 }}>
         <Button onClick={onEdit}>Editar</Button>
-        <Button variant="secondary" onClick={onShare}>Compartilhar</Button>
+        <div style={{ width: 4 }} />
         <AttachButton item={item} vault={vault} masterPassword={masterPassword} onVaultChange={onVaultChange} />
+        <IconBtn label="Compartilhar" onClick={onShare}>
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={18} cy={5} r={3} /><circle cx={6} cy={12} r={3} /><circle cx={18} cy={19} r={3} /><line x1={8.6} y1={13.5} x2={15.4} y2={17.5} /><line x1={15.4} y1={6.5} x2={8.6} y2={10.5} /></svg>
+        </IconBtn>
         <div style={{ marginLeft: 'auto' }}>
-          <Button variant="danger" onClick={onDelete}>Excluir</Button>
+          <button type="button" className="icon-btn icon-btn--danger" onClick={onDelete} aria-label="Mover para a lixeira" title="Mover para a lixeira"><TrashIcon /></button>
         </div>
       </div>
     </div>
@@ -764,20 +795,21 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
 
 const TOTPDisplay: React.FC<{ seed: string; onCopy: (code: string) => void }> = ({ seed, onCopy }) => {
   const [code, setCode] = useState('------');
-  const [remaining, setRemaining] = useState(30);
+  const [remaining, setRemaining] = useState(getTOTPRemainingSeconds());
 
   useEffect(() => {
     let mounted = true;
-    const update = async () => {
-      if (!mounted) return;
-      try {
-        const c = await generateTOTP(seed, Date.now());
-        const r = getTOTPRemainingSeconds();
-        if (mounted) { setCode(c); setRemaining(r); }
-      } catch { /* invalid seed */ }
+    let window = -1;
+    const tick = () => {
+      const now = Date.now();
+      const w = Math.floor(now / 30_000);
+      setRemaining(getTOTPRemainingSeconds());
+      if (w === window) return;
+      window = w;
+      generateTOTP(seed, now).then(c => { if (mounted) setCode(c); }).catch(() => { /* semente inválida */ });
     };
-    update();
-    const id = setInterval(update, 1000);
+    tick();
+    const id = setInterval(tick, 1000);
     return () => { mounted = false; clearInterval(id); };
   }, [seed]);
 
@@ -813,26 +845,46 @@ const TOTPDisplay: React.FC<{ seed: string; onCopy: (code: string) => void }> = 
 
 // ─── ItemCard (list) ──────────────────────────────────────────────────────────
 
-function ItemCard({ item, selected, onClick, onToggleFavorite }: {
+const ItemCard = React.memo(function ItemCard({ item, selected, onSelect, onToggleFavorite, onCopy }: {
   item: VaultItem;
   selected: boolean;
-  onClick: () => void;
-  onToggleFavorite: (e: React.MouseEvent) => void;
+  onSelect: (item: VaultItem) => void;
+  onToggleFavorite: (id: string) => void;
+  onCopy: (text: string, label: string) => void;
 }) {
+  const secret = item.type === 'password' ? item.password : undefined;
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
-    <div role="option" tabIndex={0} aria-selected={selected} className="list-item" style={{ cursor: 'pointer' }}
-      onClick={onClick}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+    <div id={`item-${item.id}`} role="option" tabIndex={selected ? 0 : -1} aria-selected={selected} className="list-item" style={{ cursor: 'pointer' }}
+      onClick={() => onSelect(item)}
     >
       <span className="tile"><TypeIcon type={item.type} size={15} color="currentColor" /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="list-item__title">{item.title}</div>
         <div className="list-item__sub">{itemSubtitle(item)}</div>
       </div>
-      <FavoriteStar on={!!item.favorite} onClick={onToggleFavorite} size={13} />
+      <div className="list-item__actions" onClick={stop}>
+        {item.username && (
+          <button type="button" className="icon-btn" title="Copiar usuário" aria-label={`Copiar usuário de ${item.title}`} onClick={() => onCopy(item.username!, 'Usuário')}>
+            <PersonIcon />
+          </button>
+        )}
+        {secret && (
+          <button type="button" className="icon-btn" title="Copiar senha" aria-label={`Copiar senha de ${item.title}`} onClick={() => onCopy(secret, 'Senha')}>
+            <KeyIcon />
+          </button>
+        )}
+        {item.type === 'totp' && item.totpSeed && (
+          <button type="button" className="icon-btn" title="Copiar código" aria-label={`Copiar código de ${item.title}`}
+            onClick={() => generateTOTP(item.totpSeed!, Date.now()).then(c => onCopy(c, 'Código')).catch(() => {})}>
+            <CopyIcon />
+          </button>
+        )}
+      </div>
+      <FavoriteStar on={!!item.favorite} onClick={e => { stop(e); onToggleFavorite(item.id); }} size={13} />
     </div>
   );
-}
+});
 
 function FavoriteStar({ on, onClick, size }: { on: boolean; onClick: (e: React.MouseEvent) => void; size: number }) {
   return (
@@ -917,7 +969,9 @@ function AttachButton({ item, vault, masterPassword, onVaultChange }: { item: Va
   const { addToast } = useToast();
   return (
     <>
-      <Button variant="secondary" onClick={() => inputRef.current?.click()}>Anexar</Button>
+      <button type="button" className="icon-btn" onClick={() => inputRef.current?.click()} aria-label="Anexar arquivo" title="Anexar arquivo">
+        <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+      </button>
       <input ref={inputRef} type="file" style={{ display: 'none' }} onChange={async e => {
         const file = e.target.files?.[0];
         if (!file) { addToast({ type: 'error', title: 'Nenhum arquivo selecionado' }); return; }
@@ -945,11 +999,15 @@ function NavBtn({ children, label, count, active, onClick, compact }: {
   );
 }
 
-function SidebarLabel({ children }: { children: React.ReactNode }) {
-  return <div className="sidebar__section">{children}</div>;
+function ToolBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" className="sidebar__icon-btn" onClick={onClick} aria-label={label} title={label}>
+      {children}
+    </button>
+  );
 }
 
-function SearchField({ value, onChange, inputRef }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement> }) {
+function SearchField({ value, onChange, inputRef, onKeyDown }: { value: string; onChange: (v: string) => void; inputRef?: React.Ref<HTMLInputElement>; onKeyDown?: (e: React.KeyboardEvent) => void }) {
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ position: 'absolute', left: 11, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: 'var(--text-3)', pointerEvents: 'none' }}>
@@ -960,7 +1018,8 @@ function SearchField({ value, onChange, inputRef }: { value: string; onChange: (
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        placeholder="Buscar no vault"
+        onKeyDown={e => { if (e.key === 'Escape' && value) { e.stopPropagation(); onChange(''); } else onKeyDown?.(e); }}
+        placeholder="Buscar  (Ctrl+F)"
         aria-label="Buscar no vault"
         className="input"
         style={{ height: 34, paddingLeft: 32, paddingRight: 32, background: 'var(--surface-2)', borderColor: 'var(--border)' }}

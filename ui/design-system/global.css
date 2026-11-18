@@ -228,7 +228,6 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; }
   border-right: 1px solid var(--sidebar-border);
   user-select: none; transition: width 160ms ease;
 }
-.sidebar__section { padding: 16px 12px 6px; font-size: 11px; font-weight: 500; color: var(--sidebar-muted); }
 .sidebar__icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; flex-shrink: 0;
@@ -325,3 +324,14 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; }
 
 /* ===== Slider ===== */
 input[type="range"] { accent-color: var(--accent); }
+
+/* ===== Refinos: barra lateral, ações rápidas, listas longas ===== */
+.sidebar__divider { height: 1px; margin: 8px 10px; background: var(--sidebar-border); flex-shrink: 0; }
+.sidebar__tools { display: flex; justify-content: space-between; padding: 8px 10px; border-top: 1px solid var(--sidebar-border); }
+.sidebar__tools--compact { flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; }
+
+.list-item { content-visibility: auto; contain-intrinsic-size: auto 52px; }
+.list-item__actions { display: none; gap: 0; }
+.list-item:hover .list-item__actions, .list-item:focus-within .list-item__actions, .list-item[aria-selected="true"] .list-item__actions { display: flex; }
+.list-item__actions .icon-btn { width: 26px; height: 26px; }
+.list-item__actions svg { width: 14px; height: 14px; }

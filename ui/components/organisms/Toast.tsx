@@ -22,8 +22,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id = generateId();
-    const duration = toast.duration ?? 4000;
-    setToasts((prev) => [...prev, { ...toast, id }]);
+    const duration = toast.duration ?? (toast.type === 'error' || toast.type === 'warning' ? 5000 : 2500);
+    setToasts((prev) => [...prev, { ...toast, id }].slice(-3));
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, duration);
