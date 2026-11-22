@@ -66,6 +66,7 @@ export interface VaultItem {
   username?: string;
   password?: string;
   totpSeed?: string;
+  totpOptions?: { algorithm: 'SHA1' | 'SHA256' | 'SHA512'; digits: number; period: number };
   passkey?: PasskeyData;
   card?: CardData;
   identity?: IdentityData;

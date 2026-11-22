@@ -1,19 +1,22 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useTheme } from '@ui/contexts/ThemeContext';
+import { useTheme, PALETTES } from '@ui/contexts/ThemeContext';
 import { useDebounce } from '@ui/contexts/useDebounce';
 import { useKeyboard } from '@ui/contexts/useKeyboard';
 import { PasswordGenerator, PasswordStrengthMeter } from '@ui/components/molecules';
 import { Button, Logo } from '@ui/components/atoms';
 import { Modal, useConfirm } from '@ui/components/organisms';
 import { useToast } from '@ui/components/organisms';
-import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import type { VaultItem, VaultItemType, VaultData } from '@core/vault/types';
 import { searchItems, addItem, updateItem, deleteItem, restoreItem, emptyTrash, addAttachment } from '@core/vault/storage';
 import { exportVault } from '@core/vault/storage';
-import { parseBitwardenCsv, parseChromeCsv, parseGenericCsv, importItems } from '@core/vault/import';
+import { parseBitwardenCsv, parseChromeCsv, parseGenericCsv, parseAegisJson, parse2fasJson, parseOtpauthList, importItems } from '@core/vault/import';
+import type { ImportResult } from '@core/vault/import';
+import { readQrFromFile } from './qr';
 import { formatDate, saveFile } from '@shared/utils';
 import { shareItem, revokeSharing, getActiveShares } from '@core/sharing/service';
-import { generateTOTP, getTOTPRemainingSeconds } from '@core/vault/totp';
+import { generateTOTP, getTOTPRemainingSeconds, isValidSecret, sanitizeOptions, totpOptionsOf } from '@core/vault/totp';
+import type { TotpOptions } from '@core/vault/totp';
 import { createAuditLog } from '@core/audit/logger';
 import { CLIPBOARD_CLEAR_MS } from '@shared/constants';
 import { VaultItemDialog, emptyForm, itemToForm } from './VaultItemDialog';
@@ -37,6 +40,30 @@ const FILTER_LABEL: Partial<Record<FilterType, string>> = {
   all: 'Todos os itens', favorites: 'Favoritos', password: 'Senhas', totp: 'Autenticador',
   card: 'Cartões', note: 'Notas', identity: 'Identidades', passkey: 'Passkeys',
 };
+
+type ImportFormat = 'bitwarden' | 'chrome' | 'generic' | 'google' | 'aegis' | '2fas' | 'otpauth';
+
+const IMPORT_HINT: Record<ImportFormat, string> = {
+  bitwarden: 'Bitwarden: Ferramentas > Exportar cofre > .csv. Logins com TOTP viram também um item de Autenticador.',
+  chrome: 'Chrome: Gerenciador de senhas > Configurações > Exportar senhas.',
+  generic: 'Colunas aceitas: title/name, username, password, url, note.',
+  google: 'No Google Authenticator: Transferir contas > Exportar. Tire um print de cada QR e use "Ler QR de imagem".',
+  aegis: 'No Aegis: Configurações > Importar e exportar > Exportar, formato JSON, sem criptografia.',
+  '2fas': 'No 2FAS: Configurações > Backup > Exportar para arquivo, sem senha.',
+  otpauth: 'Um link otpauth://totp/... por linha. Também aceita prints de QR code de cada serviço.',
+};
+
+function runImport(format: ImportFormat, text: string): ImportResult {
+  switch (format) {
+    case 'bitwarden': return { items: parseBitwardenCsv(text), skipped: 0 };
+    case 'chrome': return { items: parseChromeCsv(text), skipped: 0 };
+    case 'generic': return { items: parseGenericCsv(text), skipped: 0 };
+    case 'aegis': return parseAegisJson(text);
+    case '2fas': return parse2fasJson(text);
+    case 'google':
+    case 'otpauth': return parseOtpauthList(text);
+  }
+}
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
@@ -82,10 +109,13 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
   const [showImport, setShowImport] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [importCsv, setImportCsv] = useState('');
-  const [importFormat, setImportFormat] = useState<'bitwarden' | 'chrome' | 'generic'>('generic');
+  const [importFormat, setImportFormat] = useState<ImportFormat>('generic');
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const importQrRef = useRef<HTMLInputElement>(null);
   const [exportPassword, setExportPassword] = useState('');
   const { addToast } = useToast();
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { theme, setTheme, palette, setPalette } = useTheme();
+  const [showSettings, setShowSettings] = useState(false);
 
   const [confirm, confirmDialog] = useConfirm();
   const modalOpen = () => !!document.querySelector('[role=dialog]');
@@ -164,7 +194,10 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
     try {
       await writeText(text);
       addToast({ type: 'info', title: `${label}: copiado`, description: `A área de transferência será limpa em ${CLIPBOARD_CLEAR_MS / 1000}s.`, duration: 2500 });
-      setTimeout(() => writeText('').catch(() => {}), CLIPBOARD_CLEAR_MS);
+      setTimeout(async () => {
+        const current = await readText().catch(() => null);
+        if (current === text) await writeText('').catch(() => {});
+      }, CLIPBOARD_CLEAR_MS);
     } catch {
       addToast({ type: 'error', title: 'Falha ao copiar' });
     }
@@ -176,6 +209,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
     if (!form.title.trim()) { addToast({ type: 'error', title: 'Título obrigatório' }); return; }
     if (form.type === 'password' && !form.password) { addToast({ type: 'error', title: 'Senha obrigatória' }); return; }
     if (form.type === 'totp' && !form.totpSeed) { addToast({ type: 'error', title: 'Semente TOTP obrigatória' }); return; }
+    if (form.type === 'totp' && !isValidSecret(form.totpSeed)) { addToast({ type: 'error', title: 'Semente TOTP inválida', description: 'Use só letras A-Z e números 2-7, ou cole o link otpauth://.' }); return; }
 
     const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean);
     const isEdit = editingItem !== null;
@@ -187,6 +221,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       username: form.username || undefined,
       password: form.type === 'password' ? (form.password || undefined) : undefined,
       totpSeed: form.type === 'totp' ? (form.totpSeed || undefined) : undefined,
+      totpOptions: form.type === 'totp' ? sanitizeOptions({ algorithm: form.totpAlgorithm, digits: form.totpDigits, period: form.totpPeriod }) : undefined,
       note: form.type === 'note' ? (form.note || undefined) : undefined,
       card: form.type === 'card' ? { number: form.card.number, expiry: form.card.expiry, cvc: form.card.cvc, cardholder: form.card.cardholder, brand: form.card.brand || undefined } : undefined,
       identity: form.type === 'identity' ? { firstName: form.identity.firstName, lastName: form.identity.lastName, email: form.identity.email, phone: form.identity.phone || undefined, address: form.identity.address || undefined, document: form.identity.document || undefined } : undefined,
@@ -276,40 +311,43 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
         </div>
 
         <div style={{ padding: '2px 8px 10px' }}>
-          <button className={`nav-item${sidebarCollapsed ? ' nav-item--compact' : ''}`} onClick={openAddModal} title="Novo item (Ctrl+N)"
-            style={{ background: 'var(--sidebar-active)', color: 'var(--sidebar-text-strong)', fontWeight: 500, height: 34 }}>
+          <button className={`nav-item sidebar__new${sidebarCollapsed ? ' nav-item--compact' : ''}`} onClick={openAddModal} title="Novo item (Ctrl+N)">
             <PlusIcon />
             {!sidebarCollapsed && <span className="nav-item__label">Novo item</span>}
+            {!sidebarCollapsed && <kbd className="kbd kbd--sidebar">Ctrl N</kbd>}
           </button>
         </div>
 
         <nav style={{ flex: 1, padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
-          <NavBtn label="Todos os itens" count={counts.all} active={filter === 'all'} onClick={() => setFilter('all')} compact={sidebarCollapsed}>
+          <NavBtn label="Todos os itens" count={counts.all} active={filter === 'all'} onClick={() => setFilter('all')} compact={sidebarCollapsed} dimWhenEmpty={false}>
             <GridIcon />
           </NavBtn>
           <NavBtn label="Favoritos" count={counts.favorites} active={filter === 'favorites'} onClick={() => setFilter('favorites')} compact={sidebarCollapsed}>
             <StarIcon />
           </NavBtn>
 
-          <div className="sidebar__divider" />
+          {sidebarCollapsed ? <div className="sidebar__divider" /> : <p className="nav-group">Categorias</p>}
 
-          <NavBtn label="Senhas" count={counts.password} active={filter === 'password'} onClick={() => setFilter('password')} compact={sidebarCollapsed}>
+          <NavBtn label="Senhas" count={counts.password ?? 0} active={filter === 'password'} onClick={() => setFilter('password')} compact={sidebarCollapsed}>
             <KeyIcon />
           </NavBtn>
-          <NavBtn label="Autenticador" count={counts.totp} active={filter === 'totp'} onClick={() => setFilter('totp')} compact={sidebarCollapsed}>
+          <NavBtn label="Autenticador" count={counts.totp ?? 0} active={filter === 'totp'} onClick={() => setFilter('totp')} compact={sidebarCollapsed}>
             <ShieldClockIcon />
           </NavBtn>
-          <NavBtn label="Cartões" count={counts.card} active={filter === 'card'} onClick={() => setFilter('card')} compact={sidebarCollapsed}>
+          <NavBtn label="Cartões" count={counts.card ?? 0} active={filter === 'card'} onClick={() => setFilter('card')} compact={sidebarCollapsed}>
             <CardIcon />
           </NavBtn>
-          <NavBtn label="Notas" count={counts.note} active={filter === 'note'} onClick={() => setFilter('note')} compact={sidebarCollapsed}>
+          <NavBtn label="Notas" count={counts.note ?? 0} active={filter === 'note'} onClick={() => setFilter('note')} compact={sidebarCollapsed}>
             <NoteIcon />
           </NavBtn>
-          <NavBtn label="Identidades" count={counts.identity} active={filter === 'identity'} onClick={() => setFilter('identity')} compact={sidebarCollapsed}>
+          <NavBtn label="Identidades" count={counts.identity ?? 0} active={filter === 'identity'} onClick={() => setFilter('identity')} compact={sidebarCollapsed}>
             <PersonIcon />
           </NavBtn>
+          <NavBtn label="Passkeys" count={counts.passkey ?? 0} active={filter === 'passkey'} onClick={() => setFilter('passkey')} compact={sidebarCollapsed}>
+            <TypeIcon type="passkey" size={14} color="currentColor" />
+          </NavBtn>
 
-          <div className="sidebar__divider" />
+          {sidebarCollapsed ? <div className="sidebar__divider" /> : <p className="nav-group">Organizar</p>}
 
           <NavBtn label="Pastas seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => setFilter('folders')} compact={sidebarCollapsed}>
             <SidebarFolderIcon />
@@ -323,12 +361,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
           <ToolBtn label="Gerador de senhas" onClick={() => setShowGenerator(true)}><WandIcon /></ToolBtn>
           <ToolBtn label="Importar" onClick={() => setShowImport(true)}><ImportIcon /></ToolBtn>
           <ToolBtn label="Exportar" onClick={() => setShowExport(true)}><ExportIcon /></ToolBtn>
-          <ToolBtn label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'} onClick={toggleTheme}>
-            {theme === 'dark'
-              ? <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={12} cy={12} r={5} /><line x1={12} y1={1} x2={12} y2={3} /><line x1={12} y1={21} x2={12} y2={23} /><line x1={4.22} y1={4.22} x2={5.64} y2={5.64} /><line x1={18.36} y1={18.36} x2={19.78} y2={19.78} /><line x1={1} y1={12} x2={3} y2={12} /><line x1={21} y1={12} x2={23} y2={12} /><line x1={4.22} y1={19.78} x2={5.64} y2={18.36} /><line x1={18.36} y1={5.64} x2={19.78} y2={4.22} /></svg>
-              : <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
-            }
-          </ToolBtn>
+          <ToolBtn label="Configurações" onClick={() => setShowSettings(true)}><GearIcon /></ToolBtn>
           <ToolBtn label="Bloquear vault (Ctrl+L)" onClick={onLogout}><LogoutIcon /></ToolBtn>
         </div>
       </aside>
@@ -375,6 +408,8 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
             )}
           </div>
         </div>
+      ) : vault.items.length === 0 ? (
+        <EmptyVaultPane />
       ) : (
         <>
           {/* ══ PANE 2 — Item List ══════════════════════════════════════════ */}
@@ -385,19 +420,17 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
           }}>
             <div style={{ padding: '12px 12px 8px' }}>
               <SearchField value={search} onChange={setSearch} inputRef={searchRef} onKeyDown={onListKey} />
-              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 2px 0' }}>
-                {FILTER_LABEL[filter] ?? 'Itens'} · {filtered.length}
-              </p>
+              <div className="list-head">
+                <span className="list-head__title">{FILTER_LABEL[filter] ?? 'Itens'}</span>
+                <span className="list-head__count">{filtered.length}</span>
+              </div>
             </div>
             <div role="listbox" aria-label="Itens do vault" onKeyDown={onListKey} style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
               {filtered.length === 0 ? (
-                <div style={{ padding: '36px 16px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>
-                    {search ? 'Nada encontrado' : 'Nenhum item aqui'}
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-                    {search ? 'Tente outro termo de busca.' : 'Adicione senhas, cartões, notas e códigos.'}
-                  </p>
+                <div className="empty empty--sm">
+                  <span className="empty__mark">{search ? <SearchIcon /> : <FilterIcon filter={filter} />}</span>
+                  <p className="empty__title">{search ? 'Nada encontrado' : `Nada em ${(FILTER_LABEL[filter] ?? 'Itens').toLowerCase()}`}</p>
+                  <p className="empty__text">{search ? 'Tente outro termo de busca.' : 'Os itens deste tipo aparecem aqui quando forem criados.'}</p>
                 </div>
               ) : (
                 filtered.map(item => (
@@ -416,7 +449,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
           {/* ══ PANE 3 — Detail ═════════════════════════════════════════════ */}
           <div style={{ flex: 1, background: 'var(--canvas)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
             {!selectedItem ? (
-              <EmptyDetailPane vault={vault} onAddNew={openAddModal} />
+              <EmptyDetailPane />
             ) : (
               <ItemDetailPane
                 item={selectedItem} vault={vault} userId="local"
@@ -504,6 +537,30 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       </Modal>
 
       {/* Standalone Generator (sidebar button) */}
+      <Modal open={showSettings} onClose={() => setShowSettings(false)} title="Configurações" size="md">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div>
+            <p className="field-label">Modo</p>
+            <div className="segmented" role="group" aria-label="Modo de cor">
+              <button type="button" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}>Claro</button>
+              <button type="button" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}>Escuro</button>
+            </div>
+          </div>
+          <div>
+            <p className="field-label">Paleta</p>
+            <div className="palette-grid" role="group" aria-label="Paleta de cores">
+              {PALETTES.map(p => (
+                <button key={p.id} type="button" className="palette-option" aria-pressed={palette === p.id} onClick={() => setPalette(p.id)}>
+                  <span className="palette-option__swatches">{p.swatches.map(c => <i key={c} style={{ background: c }} />)}</span>
+                  <span className="palette-option__name">{p.label}</span>
+                  <span className="palette-option__desc">{p.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={showGenerator} onClose={() => setShowGenerator(false)} title="Gerador de senhas" size="sm">
         <PasswordGenerator onPasswordGenerated={pwd => {
           setShowGenerator(false);
@@ -512,40 +569,73 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
         }} />
       </Modal>
 
-      {/* Import CSV */}
+      {/* Import */}
       <Modal open={showImport} onClose={() => setShowImport(false)} title="Importar itens" size="md">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <span className="field-label">Origem</span>
-            <div className="segmented">
-              {(['bitwarden', 'chrome', 'generic'] as const).map(f => (
-                <button key={f} type="button" aria-pressed={importFormat === f} onClick={() => setImportFormat(f)}>
-                  {f === 'bitwarden' ? 'Bitwarden' : f === 'chrome' ? 'Chrome' : 'CSV genérico'}
-                </button>
-              ))}
-            </div>
+            <label className="field-label" htmlFor="import-format">Origem</label>
+            <select id="import-format" className="input" value={importFormat} onChange={e => setImportFormat(e.target.value as ImportFormat)}>
+              <optgroup label="Senhas">
+                <option value="bitwarden">Bitwarden (CSV)</option>
+                <option value="chrome">Chrome (CSV)</option>
+                <option value="generic">CSV genérico</option>
+              </optgroup>
+              <optgroup label="Autenticador">
+                <option value="google">Google Authenticator (QR de transferência)</option>
+                <option value="aegis">Aegis (JSON sem criptografia)</option>
+                <option value="2fas">2FAS (.2fas sem senha)</option>
+                <option value="otpauth">Links otpauth:// (um por linha)</option>
+              </optgroup>
+            </select>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>{IMPORT_HINT[importFormat]}</p>
           </div>
           <div>
-            <label className="field-label">Conteúdo do CSV</label>
+            <label className="field-label" htmlFor="import-content">Conteúdo</label>
             <textarea
+              id="import-content"
               value={importCsv}
               onChange={e => setImportCsv(e.target.value)}
               rows={7}
-              placeholder="Cole aqui o conteúdo do arquivo exportado"
+              placeholder="Cole aqui o conteúdo exportado"
               className="input mono"
               style={{ fontSize: 12 }}
             />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Button variant="secondary" size="sm" onClick={() => importFileRef.current?.click()}>Abrir arquivo</Button>
+              {(importFormat === 'google' || importFormat === 'otpauth') && (
+                <Button variant="secondary" size="sm" onClick={() => importQrRef.current?.click()}>Ler QR de imagem</Button>
+              )}
+              <input ref={importFileRef} type="file" hidden accept=".csv,.json,.2fas,.txt" onChange={async e => {
+                const file = e.target.files?.[0]; e.target.value = '';
+                if (file) setImportCsv(await file.text());
+              }} />
+              <input ref={importQrRef} type="file" hidden accept="image/*" onChange={async e => {
+                const file = e.target.files?.[0]; e.target.value = '';
+                if (!file) return;
+                const text = await readQrFromFile(file).catch(() => null);
+                if (!text) { addToast({ type: 'error', title: 'Nenhum QR code encontrado na imagem' }); return; }
+                setImportCsv(prev => (prev.trim() ? `${prev.trim()}\n${text}` : text));
+              }} />
+            </div>
           </div>
           <Button onClick={() => {
-            if (!importCsv.trim()) { addToast({ type: 'error', title: 'Cole o CSV primeiro' }); return; }
-            const parser = importFormat === 'bitwarden' ? parseBitwardenCsv : importFormat === 'chrome' ? parseChromeCsv : parseGenericCsv;
-            const parsed = parser(importCsv);
-            if (parsed.length === 0) { addToast({ type: 'error', title: 'Nenhum item encontrado' }); return; }
-            const newVault = importItems(vault, parsed);
-            onVaultChange(newVault);
+            if (!importCsv.trim()) { addToast({ type: 'error', title: 'Cole o conteúdo primeiro' }); return; }
+            let result: ImportResult;
+            try {
+              result = runImport(importFormat, importCsv);
+            } catch (err) {
+              addToast({ type: 'error', title: 'Não foi possível importar', description: err instanceof Error ? err.message : undefined });
+              return;
+            }
+            if (result.items.length === 0) { addToast({ type: 'error', title: 'Nenhum item encontrado', description: result.skipped ? `${result.skipped} entrada(s) ignorada(s) por formato não suportado.` : undefined }); return; }
+            onVaultChange(importItems(vault, result.items));
             setImportCsv('');
             setShowImport(false);
-            addToast({ type: 'success', title: `${parsed.length} item(ns) importados!` });
+            addToast({
+              type: 'success',
+              title: `${result.items.length} item(ns) importados`,
+              description: result.skipped ? `${result.skipped} entrada(s) ignorada(s): só contas TOTP são suportadas.` : undefined,
+            });
           }} disabled={!importCsv.trim()}>
             Importar itens
           </Button>
@@ -614,23 +704,37 @@ async function handleAttachDrop(e: React.DragEvent, vault: VaultData, onVaultCha
 
 // ─── EmptyDetailPane ──────────────────────────────────────────────────────────
 
-function EmptyDetailPane({ vault, onAddNew }: { vault: VaultData; onAddNew: () => void }) {
-  const empty = vault.items.length === 0;
+function EmptyDetailPane() {
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center' }}>
-      <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-2)' }}>
-        {empty ? 'Seu vault está vazio' : 'Nenhum item selecionado'}
-      </p>
-      <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4, maxWidth: 300 }}>
-        {empty ? 'Guarde a primeira senha, cartão ou nota. Tudo fica cifrado neste computador.' : 'Escolha um item na lista para ver os detalhes.'}
-      </p>
-      {empty && (
-        <div style={{ marginTop: 18 }}>
-          <Button onClick={onAddNew}>Novo item</Button>
-        </div>
-      )}
+    <div className="empty" style={{ flex: 1 }}>
+      <p className="empty__title" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Nenhum item selecionado</p>
+      <p className="empty__text">Escolha um item na lista para ver os detalhes.</p>
     </div>
   );
+}
+
+function EmptyVaultPane() {
+  return (
+    <div className="empty" style={{ flex: 1, background: 'var(--canvas)' }}>
+      <span className="empty__mark empty__mark--lg"><TypeIcon type="password" size={20} color="currentColor" /></span>
+      <p className="empty__title">Seu vault está vazio</p>
+      <p className="empty__text">Guarde a primeira senha, cartão ou nota. Tudo fica cifrado neste computador.</p>
+      <p className="empty__hint" style={{ marginTop: 16 }}>Use <strong style={{ fontWeight: 500, color: 'var(--text-2)' }}>Novo item</strong> na lateral ou <kbd className="kbd">Ctrl N</kbd></p>
+    </div>
+  );
+}
+
+function FilterIcon({ filter }: { filter: FilterType }) {
+  switch (filter) {
+    case 'favorites': return <StarIcon />;
+    case 'password': return <KeyIcon />;
+    case 'totp': return <ShieldClockIcon />;
+    case 'card': return <CardIcon />;
+    case 'note': return <NoteIcon />;
+    case 'identity': return <PersonIcon />;
+    case 'passkey': return <TypeIcon type="passkey" size={14} color="currentColor" />;
+    default: return <GridIcon />;
+  }
 }
 
 // ─── ItemDetailPane ───────────────────────────────────────────────────────────
@@ -692,7 +796,7 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
           <Section>
             <div className="card__row">
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>Código de verificação</p>
-              <TOTPDisplay seed={item.totpSeed} onCopy={code => onCopy(code, 'Código TOTP')} />
+              <TOTPDisplay seed={item.totpSeed} options={totpOptionsOf(item)} onCopy={code => onCopy(code, 'Código TOTP')} />
             </div>
             {item.username && <SecretField label="Usuário" value={item.username} onCopy={onCopy} />}
             {item.url && <DetailRow label="URL">
@@ -793,27 +897,37 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
 
 // ─── TOTPDisplay ──────────────────────────────────────────────────────────────
 
-const TOTPDisplay: React.FC<{ seed: string; onCopy: (code: string) => void }> = ({ seed, onCopy }) => {
-  const [code, setCode] = useState('------');
-  const [remaining, setRemaining] = useState(getTOTPRemainingSeconds());
+const TOTPDisplay: React.FC<{ seed: string; options: TotpOptions; onCopy: (code: string) => void }> = ({ seed, options, onCopy }) => {
+  const { algorithm, digits, period } = options;
+  const [code, setCode] = useState('-'.repeat(digits));
+  const [invalid, setInvalid] = useState(false);
+  const [remaining, setRemaining] = useState(getTOTPRemainingSeconds(period));
 
   useEffect(() => {
     let mounted = true;
     let window = -1;
+    setInvalid(false);
     const tick = () => {
       const now = Date.now();
-      const w = Math.floor(now / 30_000);
-      setRemaining(getTOTPRemainingSeconds());
+      const w = Math.floor(now / (period * 1000));
+      setRemaining(getTOTPRemainingSeconds(period));
       if (w === window) return;
       window = w;
-      generateTOTP(seed, now).then(c => { if (mounted) setCode(c); }).catch(() => { /* semente inválida */ });
+      generateTOTP(seed, now, { algorithm, digits, period })
+        .then(c => { if (mounted) setCode(c); })
+        .catch(() => { if (mounted) setInvalid(true); });
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => { mounted = false; clearInterval(id); };
-  }, [seed]);
+  }, [seed, algorithm, digits, period]);
 
-  const pct = remaining / 30;
+  if (invalid) {
+    return <p className="field-error" style={{ marginTop: 0 }}>Semente inválida. Edite o item e cole a semente ou o link otpauth:// de novo.</p>;
+  }
+
+  const half = Math.ceil(code.length / 2);
+  const pct = remaining / period;
   const r = 18;
   const circ = 2 * Math.PI * r;
   const ringColor = remaining <= 5 ? 'var(--danger)' : 'var(--accent)';
@@ -821,7 +935,7 @@ const TOTPDisplay: React.FC<{ seed: string; onCopy: (code: string) => void }> = 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
       <span className="mono" style={{ fontSize: 28, fontWeight: 500, color: 'var(--text)', letterSpacing: '0.06em', lineHeight: 1, flex: 1 }}>
-        {code.slice(0, 3)} {code.slice(3)}
+        {code.slice(0, half)} {code.slice(half)}
       </span>
       <svg width={32} height={32} viewBox="0 0 48 48" role="img" aria-label={`${remaining}s restantes`}>
         <circle cx={24} cy={24} r={r} fill="none" stroke="var(--border)" strokeWidth={4} />
@@ -876,7 +990,7 @@ const ItemCard = React.memo(function ItemCard({ item, selected, onSelect, onTogg
         )}
         {item.type === 'totp' && item.totpSeed && (
           <button type="button" className="icon-btn" title="Copiar código" aria-label={`Copiar código de ${item.title}`}
-            onClick={() => generateTOTP(item.totpSeed!, Date.now()).then(c => onCopy(c, 'Código')).catch(() => {})}>
+            onClick={() => generateTOTP(item.totpSeed!, Date.now(), totpOptionsOf(item)).then(c => onCopy(c, 'Código')).catch(() => {})}>
             <CopyIcon />
           </button>
         )}
@@ -984,14 +1098,15 @@ function AttachButton({ item, vault, masterPassword, onVaultChange }: { item: Va
   );
 }
 
-function NavBtn({ children, label, count, active, onClick, compact }: {
+function NavBtn({ children, label, count, active, onClick, compact, dimWhenEmpty = true }: {
   children: React.ReactNode; label: string; count?: number;
-  active: boolean; onClick: () => void; compact?: boolean;
+  active: boolean; onClick: () => void; compact?: boolean; dimWhenEmpty?: boolean;
 }) {
+  const dim = dimWhenEmpty && !active && count === 0;
   return (
     <button type="button" onClick={onClick} title={compact ? label : undefined} aria-label={compact ? label : undefined}
       aria-current={active ? 'true' : undefined}
-      className={`nav-item${compact ? ' nav-item--compact' : ''}`}>
+      className={`nav-item${compact ? ' nav-item--compact' : ''}${dim ? ' nav-item--empty' : ''}`}>
       {children}
       {!compact && <span className="nav-item__label">{label}</span>}
       {!compact && count !== undefined && count > 0 && <span className="nav-item__count">{count}</span>}
@@ -1019,11 +1134,12 @@ function SearchField({ value, onChange, inputRef, onKeyDown }: { value: string; 
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={e => { if (e.key === 'Escape' && value) { e.stopPropagation(); onChange(''); } else onKeyDown?.(e); }}
-        placeholder="Buscar  (Ctrl+F)"
+        placeholder="Buscar"
         aria-label="Buscar no vault"
         className="input"
-        style={{ height: 34, paddingLeft: 32, paddingRight: 32, background: 'var(--surface-2)', borderColor: 'var(--border)' }}
+        style={{ height: 34, paddingLeft: 32, paddingRight: value ? 32 : 56, background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       />
+      {!value && <kbd className="kbd" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>Ctrl F</kbd>}
       {value && (
         <button type="button" onClick={() => onChange('')} aria-label="Limpar busca" className="icon-btn"
           style={{ position: 'absolute', right: 4, top: 4, width: 26, height: 26 }}>
@@ -1072,6 +1188,7 @@ function CardIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fil
 function NoteIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></svg>; }
 function PersonIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx={12} cy={7} r={4} /></svg>; }
 function WandIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M15 4V2m0 14v-2M8 9H2m14 0h-2M13.8 13.8l1.4 1.4M4.8 4.8l1.4 1.4M13.8 4.2l1.4-1.4M4.8 19.2l1.4-1.4" /><circle cx={10} cy={9} r={3} /><path d="M10 12v8l4-2 4 2V12" /></svg>; }
+function GearIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><circle cx={12} cy={12} r={3} /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>; }
 function LogoutIcon() { return <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" /></svg>; }
 function CopyIcon() { return <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><rect x={9} y={9} width={13} height={13} rx={2} /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>; }
 function EyeIcon() { return <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx={12} cy={12} r={3} /></svg>; }

@@ -4,6 +4,9 @@ import { Button } from '@ui/components/atoms';
 import { PasswordGenerator } from '@ui/components/molecules';
 import { calculatePasswordStrength, strengthColor, strengthLabel } from '@shared/utils';
 import type { VaultItem, VaultItemType } from '@core/vault/types';
+import { DEFAULT_TOTP, TOTP_ALGORITHMS, TOTP_DIGITS, isValidSecret, normalizeSecret, parseOtpauthUri, totpOptionsOf } from '@core/vault/totp';
+import type { TotpAlgorithm } from '@core/vault/totp';
+import { readQrFromFile } from './qr';
 
 // ─── FormData (exported for vault.tsx) ────────────────────────────────────────
 
@@ -17,6 +20,9 @@ export interface FormData {
   tags: string;
   favorite: boolean;
   totpSeed: string;
+  totpAlgorithm: TotpAlgorithm;
+  totpDigits: number;
+  totpPeriod: number;
   card: { number: string; expiry: string; cvc: string; cardholder: string; brand: string };
   identity: { firstName: string; lastName: string; email: string; phone: string; address: string; document: string };
 }
@@ -24,6 +30,7 @@ export interface FormData {
 export const emptyForm = (): FormData => ({
   type: 'password', title: '', url: '', username: '', password: '',
   note: '', tags: '', favorite: false, totpSeed: '',
+  totpAlgorithm: DEFAULT_TOTP.algorithm, totpDigits: DEFAULT_TOTP.digits, totpPeriod: DEFAULT_TOTP.period,
   card: { number: '', expiry: '', cvc: '', cardholder: '', brand: '' },
   identity: { firstName: '', lastName: '', email: '', phone: '', address: '', document: '' },
 });
@@ -39,6 +46,9 @@ export function itemToForm(item: VaultItem): FormData {
     tags: item.tags.join(', '),
     favorite: item.favorite,
     totpSeed: item.totpSeed ?? '',
+    totpAlgorithm: totpOptionsOf(item).algorithm,
+    totpDigits: totpOptionsOf(item).digits,
+    totpPeriod: totpOptionsOf(item).period,
     card: { number: item.card?.number ?? '', expiry: item.card?.expiry ?? '', cvc: item.card?.cvc ?? '', cardholder: item.card?.cardholder ?? '', brand: item.card?.brand ?? '' },
     identity: { firstName: item.identity?.firstName ?? '', lastName: item.identity?.lastName ?? '', email: item.identity?.email ?? '', phone: item.identity?.phone ?? '', address: item.identity?.address ?? '', document: item.identity?.document ?? '' },
   };
@@ -88,6 +98,10 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
 
   const set = useCallback(<K extends keyof FormData>(key: K, value: FormData[K]) => {
     onChange({ ...form, [key]: value });
+  }, [form, onChange]);
+
+  const patch = useCallback((p: Partial<FormData>) => {
+    onChange({ ...form, ...p });
   }, [form, onChange]);
 
   const setCard = useCallback((k: keyof FormData['card'], v: string) => {
@@ -165,6 +179,7 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
           <FormBody
             form={form}
             set={set}
+            patch={patch}
             setCard={setCard}
             setIdentity={setIdentity}
             showPassword={showPassword}
@@ -197,9 +212,10 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
 
 // ─── FormBody ─────────────────────────────────────────────────────────────────
 
-function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassword, showGenerator, onToggleGenerator }: {
+function FormBody({ form, set, patch, setCard, setIdentity, showPassword, onTogglePassword, showGenerator, onToggleGenerator }: {
   form: FormData;
   set: <K extends keyof FormData>(k: K, v: FormData[K]) => void;
+  patch: (p: Partial<FormData>) => void;
   setCard: (k: keyof FormData['card'], v: string) => void;
   setIdentity: (k: keyof FormData['identity'], v: string) => void;
   showPassword: boolean;
@@ -299,15 +315,7 @@ function FormBody({ form, set, setCard, setIdentity, showPassword, onTogglePassw
           <Field label="Usuário / Email">
             <Inp value={form.username} onChange={v => set('username', v)} placeholder="usuario@email.com" />
           </Field>
-          <Field label="Semente TOTP (Base32)" required>
-            <Inp
-              value={form.totpSeed}
-              onChange={v => set('totpSeed', v.toUpperCase().replace(/[^A-Z2-7]/g, ''))}
-              placeholder="JBSWY3DPEHPK3PXP"
-              mono
-            />
-          </Field>
-          <InfoBox>A semente está no QR Code do serviço. Insira em Base32 (apenas A-Z e 2-7).</InfoBox>
+          <TotpSeedField form={form} patch={patch} />
         </Section>
       )}
 
@@ -462,6 +470,77 @@ function Inp({ value, onChange, placeholder, type = 'text', mono = false, autoFo
       className={mono ? 'input mono' : 'input'}
       style={extra}
     />
+  );
+}
+
+// ─── TOTP ─────────────────────────────────────────────────────────────────────
+
+function TotpSeedField({ form, patch }: { form: FormData; patch: (p: Partial<FormData>) => void }) {
+  const [message, setMessage] = useState('');
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const apply = (raw: string) => {
+    const text = raw.trim();
+    if (text.toLowerCase().startsWith('otpauth-migration://')) {
+      setMessage('Este é um QR de exportação do Google Authenticator. Use Importar > Google Authenticator.');
+      return;
+    }
+    if (text.toLowerCase().startsWith('otpauth://')) {
+      const parsed = parseOtpauthUri(text);
+      if (!parsed) { setMessage('Link otpauth inválido ou de um tipo não suportado (só TOTP).'); return; }
+      patch({
+        totpSeed: parsed.secret,
+        totpAlgorithm: parsed.algorithm,
+        totpDigits: parsed.digits,
+        totpPeriod: parsed.period,
+        title: form.title || parsed.issuer || parsed.account,
+        username: form.username || parsed.account,
+      });
+      setMessage(`Link lido: ${parsed.algorithm}, ${parsed.digits} dígitos, ${parsed.period}s.`);
+      return;
+    }
+    setMessage('');
+    patch({ totpSeed: normalizeSecret(text) });
+  };
+
+  const readImage = async (file: File | undefined) => {
+    if (!file) return;
+    const text = await readQrFromFile(file).catch(() => null);
+    if (!text) { setMessage('Nenhum QR code encontrado na imagem.'); return; }
+    apply(text);
+  };
+
+  const invalid = form.totpSeed !== '' && !isValidSecret(form.totpSeed);
+
+  return (
+    <>
+      <Field label="Semente ou link otpauth://" required>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Inp value={form.totpSeed} onChange={apply} placeholder="JBSWY3DPEHPK3PXP ou otpauth://totp/..." mono style={{ flex: 1 }} />
+          <Button variant="secondary" onClick={() => fileRef.current?.click()}>Ler QR de imagem</Button>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { readImage(e.target.files?.[0]); e.target.value = ''; }} />
+        </div>
+        {invalid
+          ? <p className="field-error">Semente inválida: use só letras A-Z e números 2-7.</p>
+          : message && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 5 }}>{message}</p>}
+      </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <Field label="Algoritmo">
+          <select className="input" value={form.totpAlgorithm} onChange={e => patch({ totpAlgorithm: e.target.value as TotpAlgorithm })}>
+            {TOTP_ALGORITHMS.map(a => <option key={a} value={a}>{a.replace('SHA', 'SHA-')}</option>)}
+          </select>
+        </Field>
+        <Field label="Dígitos">
+          <select className="input" value={form.totpDigits} onChange={e => patch({ totpDigits: Number(e.target.value) })}>
+            {TOTP_DIGITS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </Field>
+        <Field label="Período (s)">
+          <Inp type="number" value={String(form.totpPeriod)} onChange={v => patch({ totpPeriod: Math.max(1, Math.min(300, Math.trunc(Number(v)) || DEFAULT_TOTP.period)) })} />
+        </Field>
+      </div>
+      <InfoBox>Cole a semente, o link otpauth:// ou leia o QR code de um print. Algoritmo, dígitos e período só mudam em contas fora do padrão; o link já os preenche.</InfoBox>
+    </>
   );
 }
 

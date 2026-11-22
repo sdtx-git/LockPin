@@ -77,14 +77,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
         if (authMode === 'kill' && vaultId) {
           await deleteVaultData(vaultId);
           await deleteAuthInfo(vaultId);
+          await invoke('attachments_wipe_if_no_vaults');
           addToast({ type: 'warning', title: 'Vault destruído', description: 'Kill switch ativado.' });
           switchMode('register');
           return;
         }
         if (authMode === 'duress' && vaultId) {
-          const decoy: VaultData = { items: [], collections: [], organizations: [], auditLogs: [], folders: [], trash: [], version: 1 };
-          addToast({ type: 'info', title: 'Modo duress', description: 'Vault alternativo aberto.' });
-          onLoginSuccess(password, decoy, vaultId);
+          const decoyId = `decoy-${vaultId}`;
+          const decoy: VaultData = (await loadVault(password, decoyId))
+            ?? { items: [], collections: [], organizations: [], auditLogs: [], folders: [], trash: [], version: 1 };
+          addToast({ type: 'success', title: 'Vault desbloqueado!' });
+          onLoginSuccess(password, decoy, decoyId);
           return;
         }
         if (authMode === 'invalid') {

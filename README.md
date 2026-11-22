@@ -35,8 +35,8 @@ Most password managers store your data in their cloud and charge a monthly fee f
 | **Encryption** | AES-256-GCM with per-vault keys |
 | **Key derivation** | Argon2id (64 MB, 3 iterations) + PBKDF2-SHA-256 (600k iterations) |
 | **Windows Hello** | Biometric/PIN unlock via DPAPI-protected master key (Windows only) |
-| **Duress password** | Opens a decoy empty vault without revealing the real one |
-| **Kill switch** | Destroys vault data on specific password entry |
+| **Duress password** | Opens a separate decoy vault (`vault-decoy-{id}.enc`) without revealing or touching the real one |
+| **Kill switch** | Destroys the vault, its decoy and its backups on specific password entry; attachments are wiped when no other vault remains |
 | **Recovery** | 12-word BIP39-style phrase encrypted separately from the vault |
 | **Auto-lock** | Configurable timeout with 30-second warning |
 | **Anti-debug** | Detects debugger presence (Windows API / Linux `TracerPid`), exits immediately |
@@ -49,7 +49,8 @@ Most password managers store your data in their cloud and charge a monthly fee f
 |---|---|
 | **Multi-vault** | One independent vault per master password, coexisting on the same machine |
 | **Item types** | Passwords, TOTP seeds, passkeys, credit cards, secure notes, identities |
-| **TOTP** | Built-in authenticator — generates codes in-app, no external app needed |
+| **TOTP** | Built-in authenticator — generates codes in-app (SHA-1/256/512, 6–8 digits, any period); accepts `otpauth://` links and QR code images |
+| **Import** | Bitwarden, Chrome and generic CSV; authenticators from Google Authenticator (transfer QR), Aegis (plain JSON), 2FAS (no password) and `otpauth://` lists |
 | **Secure files** | Attach files up to 50 MB per item, stored as encrypted blobs |
 | **Folders** | Organize items with color-coded folders; files stored per folder |
 | **Trash** | Soft-delete with restore and empty-trash support |
@@ -57,10 +58,11 @@ Most password managers store your data in their cloud and charge a monthly fee f
 | **Password generator** | Configurable length, charset, strength meter |
 | **Clipboard** | Auto-clears clipboard 10 seconds after copy |
 | **Search** | Instant full-text filter across title, username, URL and tags |
-| **Backups** | Auto-backup on every save to `backups/vault-{id}-{timestamp}.enc` |
+| **Backups** | Auto-backup at most every 10 minutes to `backups/vault-{id}-{timestamp}.enc`, keeping the 20 most recent per vault |
 
 ### UX
 - Dark and light theme with live switching
+- Five color palettes in Settings (Petróleo, Cofre, Técnico, Monocromático, Alto contraste), each in light and dark
 - Keyboard shortcut navigation
 - Password strength indicator
 - Collapsible sidebar with collection and folder views
@@ -179,6 +181,23 @@ npm run lint          # ESLint
 npm run test          # Vitest unit tests
 cargo check           # Rust type check (run inside src-tauri/)
 ```
+
+### Docker (development on Windows)
+
+Build, test and run the app without installing Node or Rust on the host. The GUI opens through WSLg.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 build   # build the dev image (once)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 test    # sync code + typecheck, vitest, cargo check, cargo test
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 run     # sync code + tauri dev (window via WSLg)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 sync    # push edits into the running container (hot reload)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 shell   # bash inside the container
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 down    # remove the container (volumes are kept)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 android-init  # regenerate src-tauri/gen/android
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 apk     # debug APK (arm64) into build-android/
+```
+
+Source code is copied into the container (no bind mount), so run `sync` after editing. Test vault data lives in the `lockpin-data` volume, isolated from the host.
 
 ---
 

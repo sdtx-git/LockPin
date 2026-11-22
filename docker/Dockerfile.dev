@@ -1,0 +1,33 @@
+FROM rust:1-bookworm
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev \
+      build-essential file rsync curl ca-certificates fonts-dejavu-core unzip openjdk-17-jdk-headless \
+ && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV ANDROID_HOME=/opt/android-sdk \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    NDK_VERSION=26.1.10909125
+ENV NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION \
+    PATH=$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools
+
+RUN mkdir -p $ANDROID_HOME/cmdline-tools \
+ && curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline-tools.zip \
+ && unzip -q /tmp/cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools \
+ && mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest \
+ && rm /tmp/cmdline-tools.zip \
+ && yes | sdkmanager --licenses > /dev/null \
+ && sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;$NDK_VERSION" > /dev/null \
+ && rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+ENV GDK_BACKEND=wayland \
+    WAYLAND_DISPLAY=wayland-0 \
+    WEBKIT_DISABLE_DMABUF_RENDERER=1 \
+    WEBKIT_DISABLE_COMPOSITING_MODE=1 \
+    LIBGL_ALWAYS_SOFTWARE=1
+
+WORKDIR /app
+CMD ["sleep", "infinity"]

@@ -5,7 +5,25 @@ use std::time::{Duration, Instant};
 use tauri::Manager;
 
 struct RateLimiter {
-    attempts: Mutex<Vec<Instant>>,
+    reads: Mutex<Vec<Instant>>,
+    writes: Mutex<Vec<Instant>>,
+}
+
+const MAX_BACKUPS_PER_VAULT: usize = 20;
+
+fn safe_id(value: &str) -> Result<&str, String> {
+    let valid = !value.is_empty()
+        && value.len() <= 128
+        && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if valid { Ok(value) } else { Err("invalid identifier".to_string()) }
+}
+
+fn safe_filename(value: &str) -> Result<&str, String> {
+    let valid = !value.is_empty()
+        && value.len() <= 255
+        && !value.starts_with('.')
+        && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    if valid { Ok(value) } else { Err("invalid filename".to_string()) }
 }
 
 // Windows: ao lado do executável. Demais: diretório de dados do usuário (XDG).
@@ -15,7 +33,15 @@ fn app_base() -> PathBuf {
     exe.parent().expect("executable has no parent").to_path_buf()
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(mobile)]
+static MOBILE_BASE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+#[cfg(mobile)]
+fn app_base() -> PathBuf {
+    MOBILE_BASE.get().expect("app data dir not initialized").clone()
+}
+
+#[cfg(all(not(target_os = "windows"), not(mobile)))]
 fn app_base() -> PathBuf {
     use std::os::unix::fs::DirBuilderExt;
     let base = std::env::var_os("XDG_DATA_HOME")
@@ -180,14 +206,14 @@ fn argon2_derive_key(password: String, salt: String, mem_cost: u32, time_cost: u
 
 #[tauri::command]
 fn read_vault(vault_id: String, rl: tauri::State<RateLimiter>) -> Result<String, String> {
-    check_rate_limit(&rl.attempts, 30, Duration::from_secs(60))?;
-    std::fs::read_to_string(&vault_file_path(&vault_id)).map_err(|e| e.to_string())
+    check_rate_limit(&rl.reads, 30, Duration::from_secs(60))?;
+    std::fs::read_to_string(&vault_file_path(safe_id(&vault_id)?)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn write_vault(vault_id: String, rl: tauri::State<RateLimiter>, data: String) -> Result<(), String> {
-    check_rate_limit(&rl.attempts, 60, Duration::from_secs(60))?;
-    write_private(&vault_file_path(&vault_id), data.as_bytes()).map_err(|e| e.to_string())
+    check_rate_limit(&rl.writes, 60, Duration::from_secs(60))?;
+    write_private(&vault_file_path(safe_id(&vault_id)?), data.as_bytes()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -195,19 +221,62 @@ fn vault_exists() -> Result<bool, String> {
     Ok(vaults_auth_path().exists())
 }
 
+fn backup_files_of(vault_id: &str) -> Vec<PathBuf> {
+    let prefix = format!("vault-{}-", vault_id);
+    let mut files: Vec<PathBuf> = std::fs::read_dir(backups_path())
+        .map(|dir| dir
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.file_name()
+                .map(|name| name.to_string_lossy().starts_with(&prefix))
+                .unwrap_or(false))
+            .collect())
+        .unwrap_or_default();
+    files.sort();
+    files
+}
+
 #[tauri::command]
 fn delete_vault(vault_id: String) -> Result<(), String> {
-    let p = vault_file_path(&vault_id);
-    if p.exists() { secure_delete(&p)?; }
+    let vault_id = safe_id(&vault_id)?;
+    let decoy_id = format!("decoy-{}", vault_id);
+    for id in [vault_id, decoy_id.as_str()] {
+        secure_delete(&vault_file_path(id))?;
+        for backup in backup_files_of(id) {
+            secure_delete(&backup)?;
+        }
+    }
     Ok(())
 }
 
 #[tauri::command]
+fn attachments_wipe_if_no_vaults() -> Result<(), String> {
+    let has_vaults = std::fs::read_to_string(vaults_auth_path())
+        .map(|content| content.lines().any(|line| !line.trim().is_empty()))
+        .unwrap_or(false);
+    let dir = attachments_dir();
+    if has_vaults || !dir.exists() { return Ok(()); }
+    for item_dir in std::fs::read_dir(&dir).map_err(|e| e.to_string())?.filter_map(|entry| entry.ok()) {
+        for file in std::fs::read_dir(item_dir.path()).map_err(|e| e.to_string())?.filter_map(|entry| entry.ok()) {
+            secure_delete(&file.path())?;
+        }
+    }
+    std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn write_backup(vault_id: String, data: String, timestamp: String) -> Result<(), String> {
+    let vault_id = safe_id(&vault_id)?;
     let bp = backups_path();
     std::fs::create_dir_all(&bp).map_err(|e| e.to_string())?;
-    let path = bp.join(format!("vault-{}-{}.enc", vault_id, timestamp));
-    write_private(&path, data.as_bytes()).map_err(|e| e.to_string())
+    let path = bp.join(format!("vault-{}-{}.enc", vault_id, safe_id(&timestamp)?));
+    write_private(&path, data.as_bytes()).map_err(|e| e.to_string())?;
+    let backups = backup_files_of(vault_id);
+    let excess = backups.len().saturating_sub(MAX_BACKUPS_PER_VAULT);
+    for old in &backups[..excess] {
+        secure_delete(old)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -234,13 +303,13 @@ fn list_backups() -> Result<Vec<String>, String> {
 
 #[tauri::command]
 fn get_backup(filename: String) -> Result<String, String> {
-    let path = backups_path().join(&filename);
+    let path = backups_path().join(safe_filename(&filename)?);
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn vault_path_cmd(vault_id: String) -> Result<String, String> {
-    Ok(vault_file_path(&vault_id).to_string_lossy().to_string())
+    Ok(vault_file_path(safe_id(&vault_id)?).to_string_lossy().to_string())
 }
 
 fn attachments_dir() -> PathBuf {
@@ -249,21 +318,21 @@ fn attachments_dir() -> PathBuf {
 
 #[tauri::command]
 fn attachment_write(item_id: String, attachment_id: String, data: Vec<u8>) -> Result<(), String> {
-    let dir = attachments_dir().join(&item_id);
+    let dir = attachments_dir().join(safe_id(&item_id)?);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(format!("{}.enc", attachment_id));
+    let path = dir.join(format!("{}.enc", safe_id(&attachment_id)?));
     write_private(&path, &data).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn attachment_read(item_id: String, attachment_id: String) -> Result<Vec<u8>, String> {
-    let path = attachments_dir().join(&item_id).join(format!("{}.enc", attachment_id));
+    let path = attachments_dir().join(safe_id(&item_id)?).join(format!("{}.enc", safe_id(&attachment_id)?));
     std::fs::read(&path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn attachment_delete(item_id: String, attachment_id: String) -> Result<(), String> {
-    let path = attachments_dir().join(&item_id).join(format!("{}.enc", attachment_id));
+    let path = attachments_dir().join(safe_id(&item_id)?).join(format!("{}.enc", safe_id(&attachment_id)?));
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
@@ -272,7 +341,7 @@ fn attachment_delete(item_id: String, attachment_id: String) -> Result<(), Strin
 
 #[tauri::command]
 fn attachment_delete_all(item_id: String) -> Result<(), String> {
-    let dir = attachments_dir().join(&item_id);
+    let dir = attachments_dir().join(safe_id(&item_id)?);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
     }
@@ -294,7 +363,7 @@ fn delete_auth(vault_id: String) -> Result<(), String> {
     let path = vaults_auth_path();
     if !path.exists() { return Ok(()); }
     let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let prefix = format!("{}|", vault_id);
+    let prefix = format!("{}|", safe_id(&vault_id)?);
     let new_content: Vec<&str> = content.lines()
         .filter(|line| !line.starts_with(prefix.as_str()))
         .collect();
@@ -443,7 +512,16 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(RateLimiter { attempts: Mutex::new(vec![]) })
+        .manage(RateLimiter { reads: Mutex::new(vec![]), writes: Mutex::new(vec![]) })
+        .setup(|_app| {
+            #[cfg(mobile)]
+            {
+                let dir = _app.path().app_data_dir()?;
+                std::fs::create_dir_all(&dir)?;
+                let _ = MOBILE_BASE.set(dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             read_vault,
             write_vault,
@@ -466,8 +544,47 @@ pub fn run() {
             attachment_read,
             attachment_delete,
             attachment_delete_all,
+            attachments_wipe_if_no_vaults,
             save_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_id_accepts_generated_ids() {
+        assert!(safe_id("3f2a9c1e-8b7d-4e6f-a1b2-c3d4e5f6a7b8").is_ok());
+        assert!(safe_id("decoy-3f2a9c1e-8b7d-4e6f-a1b2-c3d4e5f6a7b8").is_ok());
+        assert!(safe_id("lx3k9a-4fj2k1z0").is_ok());
+        assert!(safe_id("2026-11-22T13-05-10-123Z").is_ok());
+    }
+
+    #[test]
+    fn safe_id_rejects_paths() {
+        for bad in ["", "..", "../x", "a/b", "a\\b", "C:x", "a.b", "a b"] {
+            assert!(safe_id(bad).is_err(), "{bad}");
+        }
+        assert!(safe_id(&"a".repeat(129)).is_err());
+    }
+
+    #[test]
+    fn safe_filename_rejects_traversal() {
+        assert!(safe_filename("vault-abc-2026-11-22T13-05-10-123Z.enc").is_ok());
+        for bad in ["", ".hidden", "../vaults.auth", "..\\vaults.auth", "a/b.enc"] {
+            assert!(safe_filename(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn rate_limit_blocks_after_max() {
+        let attempts = Mutex::new(vec![]);
+        for _ in 0..3 {
+            assert!(check_rate_limit(&attempts, 3, Duration::from_secs(60)).is_ok());
+        }
+        assert!(check_rate_limit(&attempts, 3, Duration::from_secs(60)).is_err());
+    }
 }
