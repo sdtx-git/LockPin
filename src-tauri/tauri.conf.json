@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "LockPin",
+        "decorations": false,
         "width": 1100,
         "height": 750,
         "resizable": true,

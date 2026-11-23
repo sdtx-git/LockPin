@@ -137,8 +137,15 @@ No build tools required:
 
 | Platform | Path |
 |---|---|
-| Linux | `$XDG_DATA_HOME/lockpin` (default `~/.local/share/lockpin`), directory `0700`, files `0600` |
+| Linux (AppImage / portable) | `$LOCKPIN_DATA_DIR` if set, otherwise next to the `.AppImage` |
+| Linux (other) | `$XDG_DATA_HOME/lockpin` (default `~/.local/share/lockpin`), directory `0700`, files `0600` |
 | Windows | Next to the executable |
+
+Files are written atomically (temporary file + rename), so removing the drive mid-save keeps the previous version intact.
+
+### Portable (removable drive, Windows + Linux)
+
+`code\docker-dev.ps1 portable` builds `build-portable/LockPin/` with `LockPin.exe`, `LockPin.AppImage` and `LockPin.sh`. Copy the folder to the drive: both systems share the same vault in that folder. On Windows run `LockPin.exe`; on Linux run `sh LockPin.sh` (works without FUSE and on drives mounted `noexec`). Windows Hello unlock only works on the PC where it was enabled; elsewhere use the master password.
 
 ### Build from source
 
@@ -195,6 +202,7 @@ powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 shell   # bash insi
 powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 down    # remove the container (volumes are kept)
 powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 android-init  # regenerate src-tauri/gen/android
 powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 apk     # debug APK (arm64) into build-android/
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 portable  # LockPin.exe + LockPin.AppImage into build-portable/LockPin/
 ```
 
 Source code is copied into the container (no bind mount), so run `sync` after editing. Test vault data lives in the `lockpin-data` volume, isolated from the host.

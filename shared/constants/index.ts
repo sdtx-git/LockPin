@@ -1,4 +1,4 @@
-export const APP_NAME = 'LockPin Enterprise';
+export const APP_NAME = 'LockPin';
 export const APP_VERSION = '3.0.0';
 
 export const VAULT_VERSION = 1;

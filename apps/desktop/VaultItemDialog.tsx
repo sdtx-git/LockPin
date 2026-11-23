@@ -129,6 +129,7 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
   return (
     <div
       role="dialog" aria-modal="true"
+      className="dialog"
       style={{
         position: 'fixed', inset: 0, zIndex: tokens.zIndex.modal,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -138,6 +139,7 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--overlay)' }} />
 
       <div
+        className="dialog__panel"
         style={{
           position: 'relative', zIndex: 1,
           width: '100%', maxWidth: 560,
@@ -165,7 +167,7 @@ export const VaultItemDialog: React.FC<VaultItemDialogProps> = ({
 
         {/* Type picker */}
         <div style={{ padding: '16px 20px 0', flexShrink: 0 }}>
-          <div className="segmented" role="group" aria-label="Tipo de item">
+          <div className="segmented segmented--types" role="group" aria-label="Tipo de item">
             {TYPES.map(t => (
               <button key={t.key} type="button" aria-pressed={form.type === t.key} onClick={() => set('type', t.key)}>
                 {t.label}

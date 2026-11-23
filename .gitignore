@@ -16,6 +16,7 @@ src-tauri/gen/android/app/build/
 src-tauri/gen/android/build/
 src-tauri/gen/android/.gradle/
 build-android/
+build-portable/
 
 # Environment
 .env

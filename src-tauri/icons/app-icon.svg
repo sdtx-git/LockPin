@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a9fb9"/>
+      <stop offset="0.48" stop-color="#1a6a85"/>
+      <stop offset="1" stop-color="#0e4254"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.24"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="keyhole">
+      <rect x="4.5" y="10" width="15" height="11.5" rx="3.2" fill="#fff"/>
+      <circle cx="12" cy="14.6" r="1.75" fill="#000"/>
+      <path d="M11.15 15.5h1.7l.45 3h-2.6z" fill="#000"/>
+    </mask>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="236" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="236" fill="url(#shine)"/>
+  <rect x="65.5" y="65.5" width="893" height="893" rx="234.5" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3"/>
+  <g transform="translate(234 234) scale(23.17)">
+    <path d="M7.75 10.5V7.75a4.25 4.25 0 0 1 8.5 0v2.75" fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round"/>
+    <rect x="4.5" y="10" width="15" height="11.5" rx="3.2" fill="#ffffff" mask="url(#keyhole)"/>
+  </g>
+</svg>

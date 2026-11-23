@@ -1,0 +1,25 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH \
+    APPIMAGE_EXTRACT_AND_RUN=1 \
+    NO_STRIP=true
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev \
+      build-essential file rsync curl wget ca-certificates xdg-utils squashfs-tools \
+      clang lld llvm \
+ && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
+ && rustup target add x86_64-pc-windows-msvc \
+ && cargo install cargo-xwin --locked \
+ && rm -rf /usr/local/cargo/registry
+
+WORKDIR /app
+CMD ["sleep", "infinity"]

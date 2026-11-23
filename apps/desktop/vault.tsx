@@ -3,7 +3,7 @@ import { useTheme, PALETTES } from '@ui/contexts/ThemeContext';
 import { useDebounce } from '@ui/contexts/useDebounce';
 import { useKeyboard } from '@ui/contexts/useKeyboard';
 import { PasswordGenerator, PasswordStrengthMeter } from '@ui/components/molecules';
-import { Button, Logo } from '@ui/components/atoms';
+import { Button, Logo, TitleBar } from '@ui/components/atoms';
 import { Modal, useConfirm } from '@ui/components/organisms';
 import { useToast } from '@ui/components/organisms';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -117,6 +117,43 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
   const { theme, setTheme, palette, setPalette } = useTheme();
   const [showSettings, setShowSettings] = useState(false);
 
+  const mobile = useNarrow();
+  const collapsed = sidebarCollapsed && !mobile;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const navDepth = useRef(0);
+  const drawerRef = useRef(false);
+  drawerRef.current = drawerOpen;
+
+  const pushNav = useCallback(() => {
+    window.history.pushState({ lockpin: true }, '');
+    navDepth.current += 1;
+  }, []);
+  const popNav = useCallback(() => {
+    if (navDepth.current > 0) window.history.back();
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => {
+      navDepth.current = Math.max(0, navDepth.current - 1);
+      if (drawerRef.current) setDrawerOpen(false);
+      else setSelectedItem(null);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    if (mobile && !selectedItem && !drawerOpen && navDepth.current > 0) popNav();
+  }, [mobile, selectedItem, drawerOpen, popNav]);
+
+  const openItem = useCallback((item: VaultItem) => {
+    if (mobile && navDepth.current === 0) pushNav();
+    setSelectedItem(item);
+  }, [mobile, pushNav]);
+  const openDrawer = () => { pushNav(); setDrawerOpen(true); };
+  const pick = (f: FilterType) => { setFilter(f); if (mobile) popNav(); };
+  const tool = (fn: () => void) => () => { if (mobile) popNav(); fn(); };
+
   const [confirm, confirmDialog] = useConfirm();
   const modalOpen = () => !!document.querySelector('[role=dialog]');
 
@@ -167,11 +204,21 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
     }
   }, [vault.items]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (selectedItem && filter !== 'folders' && filter !== 'trash' && !filtered.some(i => i.id === selectedItem.id)) setSelectedItem(null);
+  }, [filtered]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Modal openers ────────────────────────────────────────────────────────────
 
   const openAddModal = useCallback(() => {
     setEditingItem(null);
     setForm(emptyForm());
+    setShowAddModal(true);
+  }, []);
+
+  const openAddModalOf = useCallback((type: VaultItemType) => {
+    setEditingItem(null);
+    setForm({ ...emptyForm(), type });
     setShowAddModal(true);
   }, []);
 
@@ -298,73 +345,86 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
         </span>
       </div>}
       {/* ══ PANE 1 — Sidebar ══════════════════════════════════════════════════ */}
-      <aside className="sidebar" style={{ width: sidebarCollapsed ? 56 : 224 }}>
-        <div style={{ height: 56, padding: sidebarCollapsed ? 0 : '0 10px 0 14px', display: 'flex', alignItems: 'center', justifyContent: sidebarCollapsed ? 'center' : 'flex-start', gap: 10, flexShrink: 0 }}>
-          {!sidebarCollapsed && <>
+      {mobile && drawerOpen && <div className="drawer-backdrop" onClick={popNav} />}
+      <aside className={`sidebar${mobile ? ` sidebar--drawer${drawerOpen ? ' is-open' : ''}` : ''}`} style={{ width: mobile ? 280 : collapsed ? 56 : 224 }} aria-hidden={mobile && !drawerOpen ? true : undefined}>
+        <div data-tauri-drag-region style={{ height: 56, padding: collapsed ? 0 : '0 10px 0 14px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10, flexShrink: 0 }}>
+          {!collapsed && <>
             <Logo size={26} />
-            <span style={{ flex: 1, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--sidebar-text-strong)' }}>LockPin</span>
+            <span data-tauri-drag-region style={{ flex: 1, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--sidebar-text-strong)' }}>LockPin</span>
           </>}
-          <button className="sidebar__icon-btn" onClick={() => setSidebarCollapsed(v => !v)}
-            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}>
+          {!mobile && <button className="sidebar__icon-btn" onClick={() => setSidebarCollapsed(v => !v)}
+            aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'} title={collapsed ? 'Expandir menu' : 'Recolher menu'}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={3} y={4} width={18} height={16} rx={2} /><line x1={9} y1={4} x2={9} y2={20} /></svg>
-          </button>
+          </button>}
         </div>
 
-        <div style={{ padding: '2px 8px 10px' }}>
-          <button className={`nav-item sidebar__new${sidebarCollapsed ? ' nav-item--compact' : ''}`} onClick={openAddModal} title="Novo item (Ctrl+N)">
+        <div style={{ padding: '2px 8px 10px' }} hidden={mobile}>
+          <button className={`nav-item sidebar__new${collapsed ? ' nav-item--compact' : ''}`} onClick={openAddModal} title="Novo item (Ctrl+N)">
             <PlusIcon />
-            {!sidebarCollapsed && <span className="nav-item__label">Novo item</span>}
-            {!sidebarCollapsed && <kbd className="kbd kbd--sidebar">Ctrl N</kbd>}
+            {!collapsed && <span className="nav-item__label">Novo item</span>}
+            {!collapsed && <kbd className="kbd kbd--sidebar">Ctrl N</kbd>}
           </button>
         </div>
 
         <nav style={{ flex: 1, padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
-          <NavBtn label="Todos os itens" count={counts.all} active={filter === 'all'} onClick={() => setFilter('all')} compact={sidebarCollapsed} dimWhenEmpty={false}>
+          <NavBtn label="Todos os itens" count={counts.all} active={filter === 'all'} onClick={() => pick('all')} compact={collapsed} dimWhenEmpty={false}>
             <GridIcon />
           </NavBtn>
-          <NavBtn label="Favoritos" count={counts.favorites} active={filter === 'favorites'} onClick={() => setFilter('favorites')} compact={sidebarCollapsed}>
+          <NavBtn label="Favoritos" count={counts.favorites} active={filter === 'favorites'} onClick={() => pick('favorites')} compact={collapsed}>
             <StarIcon />
           </NavBtn>
 
-          {sidebarCollapsed ? <div className="sidebar__divider" /> : <p className="nav-group">Categorias</p>}
+          {collapsed ? <div className="sidebar__divider" /> : <p className="nav-group">Categorias</p>}
 
-          <NavBtn label="Senhas" count={counts.password ?? 0} active={filter === 'password'} onClick={() => setFilter('password')} compact={sidebarCollapsed}>
+          <NavBtn label="Senhas" count={counts.password ?? 0} active={filter === 'password'} onClick={() => pick('password')} compact={collapsed}>
             <KeyIcon />
           </NavBtn>
-          <NavBtn label="Autenticador" count={counts.totp ?? 0} active={filter === 'totp'} onClick={() => setFilter('totp')} compact={sidebarCollapsed}>
+          <NavBtn label="Autenticador" count={counts.totp ?? 0} active={filter === 'totp'} onClick={() => pick('totp')} compact={collapsed}>
             <ShieldClockIcon />
           </NavBtn>
-          <NavBtn label="Cartões" count={counts.card ?? 0} active={filter === 'card'} onClick={() => setFilter('card')} compact={sidebarCollapsed}>
+          <NavBtn label="Cartões" count={counts.card ?? 0} active={filter === 'card'} onClick={() => pick('card')} compact={collapsed}>
             <CardIcon />
           </NavBtn>
-          <NavBtn label="Notas" count={counts.note ?? 0} active={filter === 'note'} onClick={() => setFilter('note')} compact={sidebarCollapsed}>
+          <NavBtn label="Notas" count={counts.note ?? 0} active={filter === 'note'} onClick={() => pick('note')} compact={collapsed}>
             <NoteIcon />
           </NavBtn>
-          <NavBtn label="Identidades" count={counts.identity ?? 0} active={filter === 'identity'} onClick={() => setFilter('identity')} compact={sidebarCollapsed}>
+          <NavBtn label="Identidades" count={counts.identity ?? 0} active={filter === 'identity'} onClick={() => pick('identity')} compact={collapsed}>
             <PersonIcon />
           </NavBtn>
-          <NavBtn label="Passkeys" count={counts.passkey ?? 0} active={filter === 'passkey'} onClick={() => setFilter('passkey')} compact={sidebarCollapsed}>
+          <NavBtn label="Passkeys" count={counts.passkey ?? 0} active={filter === 'passkey'} onClick={() => pick('passkey')} compact={collapsed}>
             <TypeIcon type="passkey" size={14} color="currentColor" />
           </NavBtn>
 
-          {sidebarCollapsed ? <div className="sidebar__divider" /> : <p className="nav-group">Organizar</p>}
+          {collapsed ? <div className="sidebar__divider" /> : <p className="nav-group">Organizar</p>}
 
-          <NavBtn label="Pastas seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => setFilter('folders')} compact={sidebarCollapsed}>
+          <NavBtn label="Pastas seguras" count={vault.folders?.length ?? 0} active={filter === 'folders'} onClick={() => pick('folders')} compact={collapsed}>
             <SidebarFolderIcon />
           </NavBtn>
-          <NavBtn label="Lixeira" count={vault.trash?.length ?? 0} active={filter === 'trash'} onClick={() => setFilter('trash')} compact={sidebarCollapsed}>
+          <NavBtn label="Lixeira" count={vault.trash?.length ?? 0} active={filter === 'trash'} onClick={() => pick('trash')} compact={collapsed}>
             <TrashIcon />
           </NavBtn>
         </nav>
 
-        <div className={`sidebar__tools${sidebarCollapsed ? ' sidebar__tools--compact' : ''}`}>
-          <ToolBtn label="Gerador de senhas" onClick={() => setShowGenerator(true)}><WandIcon /></ToolBtn>
-          <ToolBtn label="Importar" onClick={() => setShowImport(true)}><ImportIcon /></ToolBtn>
-          <ToolBtn label="Exportar" onClick={() => setShowExport(true)}><ExportIcon /></ToolBtn>
-          <ToolBtn label="Configurações" onClick={() => setShowSettings(true)}><GearIcon /></ToolBtn>
-          <ToolBtn label="Bloquear vault (Ctrl+L)" onClick={onLogout}><LogoutIcon /></ToolBtn>
+        <div className={`sidebar__tools${mobile ? ' sidebar__tools--list' : collapsed ? ' sidebar__tools--compact' : ''}`}>
+          <ToolBtn label="Gerador de senhas" text={mobile ? 'Gerador de senhas' : undefined} onClick={tool(() => setShowGenerator(true))}><WandIcon /></ToolBtn>
+          <ToolBtn label="Importar" text={mobile ? 'Importar' : undefined} onClick={tool(() => setShowImport(true))}><ImportIcon /></ToolBtn>
+          <ToolBtn label="Exportar" text={mobile ? 'Exportar' : undefined} onClick={tool(() => setShowExport(true))}><ExportIcon /></ToolBtn>
+          <ToolBtn label="Configurações" text={mobile ? 'Configurações' : undefined} onClick={tool(() => setShowSettings(true))}><GearIcon /></ToolBtn>
+          <ToolBtn label="Bloquear vault (Ctrl+L)" text={mobile ? 'Bloquear' : undefined} onClick={tool(onLogout)}><LogoutIcon /></ToolBtn>
         </div>
       </aside>
+
+      <div className="app-column">
+      <TitleBar />
+      <div className={`vault-main${mobile ? ' vault-main--mobile' : ''}`}>
+      {mobile && (
+        <header className="mobile-bar">
+          {selectedItem && filter !== 'folders' && filter !== 'trash'
+            ? <button type="button" className="icon-btn" aria-label="Voltar" onClick={() => (navDepth.current > 0 ? popNav() : setSelectedItem(null))}><BackIcon /></button>
+            : <button type="button" className="icon-btn" aria-label="Abrir menu" onClick={openDrawer}><MenuIcon /></button>}
+          <span className="mobile-bar__title">{filter === 'folders' ? 'Pastas seguras' : filter === 'trash' ? 'Lixeira' : FILTER_LABEL[filter] ?? 'Itens'}</span>
+        </header>
+      )}
 
       {filter === 'folders' ? (
         /* ══ FOLDER MODE — replaces panes 2 & 3 ════════════════════════════ */
@@ -375,7 +435,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       ) : filter === 'trash' ? (
         /* ══ TRASH VIEW ════════════════════════════════════════════════════ */
         <div style={{ flex: 1, overflowY: 'auto', background: 'var(--canvas)' }}>
-          <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 28px 40px' }}>
+          <div className="page-body" style={{ maxWidth: 720 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, minHeight: 34 }}>
               <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)' }}>Lixeira</h2>
               {(vault.trash?.length ?? 0) > 0 && (
@@ -409,14 +469,14 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
           </div>
         </div>
       ) : vault.items.length === 0 ? (
-        <EmptyVaultPane />
+        <EmptyVaultPane onCreate={openAddModalOf} onImport={() => setShowImport(true)} />
       ) : (
         <>
           {/* ══ PANE 2 — Item List ══════════════════════════════════════════ */}
-          <div style={{
-            width: 304, flexShrink: 0, background: 'var(--surface)',
-            borderRight: '1px solid var(--border)',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          {!(mobile && selectedItem) && <div style={{
+            width: mobile ? 'auto' : 304, flex: mobile ? 1 : undefined, flexShrink: 0, background: 'var(--canvas)',
+            borderRight: mobile ? 'none' : '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0,
           }}>
             <div style={{ padding: '12px 12px 8px' }}>
               <SearchField value={search} onChange={setSearch} inputRef={searchRef} onKeyDown={onListKey} />
@@ -437,17 +497,17 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
                   <ItemCard
                     key={item.id} item={item}
                     selected={selectedItem?.id === item.id}
-                    onSelect={setSelectedItem}
+                    onSelect={openItem}
                     onToggleFavorite={handleToggleFavorite}
                     onCopy={copy}
                   />
                 ))
               )}
             </div>
-          </div>
+          </div>}
 
           {/* ══ PANE 3 — Detail ═════════════════════════════════════════════ */}
-          <div style={{ flex: 1, background: 'var(--canvas)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          {(!mobile || selectedItem) && <div style={{ flex: 1, background: 'var(--canvas)', display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
             {!selectedItem ? (
               <EmptyDetailPane />
             ) : (
@@ -468,8 +528,14 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
                 }}
               />
             )}
-          </div>
+          </div>}
         </>
+      )}
+      </div>
+      </div>
+
+      {mobile && !selectedItem && filter !== 'folders' && filter !== 'trash' && (
+        <button type="button" className="fab" aria-label="Novo item" onClick={openAddModal}><PlusIcon /></button>
       )}
 
       {/* ══ Dialogs ══════════════════════════════════════════════════════════════ */}
@@ -707,22 +773,63 @@ async function handleAttachDrop(e: React.DragEvent, vault: VaultData, onVaultCha
 function EmptyDetailPane() {
   return (
     <div className="empty" style={{ flex: 1 }}>
-      <p className="empty__title" style={{ color: 'var(--text-3)', fontWeight: 500 }}>Nenhum item selecionado</p>
+      <span className="avatar empty__avatar" aria-hidden>
+        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={4} y={10} width={16} height={11} rx={2} /><path d="M8 10V7a4 4 0 018 0v3" /></svg>
+      </span>
+      <p className="empty__title" style={{ fontSize: 15 }}>Nenhum item selecionado</p>
       <p className="empty__text">Escolha um item na lista para ver os detalhes.</p>
+      <div className="empty__shortcuts">
+        <span><kbd className="kbd">Ctrl N</kbd> Novo item</span>
+        <span><kbd className="kbd">Ctrl F</kbd> Buscar</span>
+        <span><kbd className="kbd">Ctrl L</kbd> Bloquear</span>
+      </div>
     </div>
   );
 }
 
-function EmptyVaultPane() {
+function EmptyVaultPane({ onCreate, onImport }: { onCreate: (type: VaultItemType) => void; onImport: () => void }) {
+  const starts: { type: VaultItemType; label: string; hint: string }[] = [
+    { type: 'password', label: 'Senha', hint: 'Login de site ou app' },
+    { type: 'card', label: 'Cartão', hint: 'Crédito ou débito' },
+    { type: 'note', label: 'Nota', hint: 'Texto protegido' },
+  ];
   return (
-    <div className="empty" style={{ flex: 1, background: 'var(--canvas)' }}>
-      <span className="empty__mark empty__mark--lg"><TypeIcon type="password" size={20} color="currentColor" /></span>
-      <p className="empty__title">Seu vault está vazio</p>
-      <p className="empty__text">Guarde a primeira senha, cartão ou nota. Tudo fica cifrado neste computador.</p>
-      <p className="empty__hint" style={{ marginTop: 16 }}>Use <strong style={{ fontWeight: 500, color: 'var(--text-2)' }}>Novo item</strong> na lateral ou <kbd className="kbd">Ctrl N</kbd></p>
+    <div className="welcome">
+      <Logo size={64} />
+      <h2 className="welcome__title">Seu vault está pronto</h2>
+      <p className="welcome__text">Guarde o primeiro item. Tudo fica cifrado neste dispositivo, sem conta e sem nuvem.</p>
+      <div className="welcome__grid">
+        {starts.map(s => (
+          <button key={s.type} type="button" className="welcome__card" onClick={() => onCreate(s.type)}>
+            <span className="avatar"><TypeIcon type={s.type} size={17} color="currentColor" /></span>
+            <strong>{s.label}</strong>
+            <span>{s.hint}</span>
+          </button>
+        ))}
+        <button type="button" className="welcome__card" onClick={onImport}>
+          <span className="avatar"><ImportIcon /></span>
+          <strong>Importar</strong>
+          <span>De outro gerenciador</span>
+        </button>
+      </div>
     </div>
   );
 }
+
+function useNarrow(): boolean {
+  const query = '(max-width: 719px)';
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
+function MenuIcon() { return <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>; }
+function BackIcon() { return <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>; }
 
 function FilterIcon({ filter }: { filter: FilterType }) {
   switch (filter) {
@@ -759,25 +866,27 @@ function ItemDetailPane({ item, onEdit, onDelete, onShare, onCopy, onToggleFavor
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-       <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 28px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-          <span className="tile tile--lg"><TypeIcon type={item.type} size={19} color="currentColor" /></span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.title}
-            </h2>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-              {TYPE_LABEL[item.type]} · atualizado {formatDate(item.updatedAt)}
-            </p>
+       <div className="page-body" style={{ maxWidth: 640 }}>
+        <div className="card hero">
+          <div className="hero__band" />
+          <div className="hero__body">
+            <ItemAvatar item={item} size={60} className="hero__avatar" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 className="hero__title">{item.title}</h2>
+              <p className="hero__meta">
+                <TypeIcon type={item.type} size={12} color="currentColor" />
+                {TYPE_LABEL[item.type]} · atualizado {formatDate(item.updatedAt)}
+              </p>
+            </div>
+            <FavoriteStar on={!!item.favorite} onClick={onToggleFavorite} size={18} />
           </div>
-          <FavoriteStar on={!!item.favorite} onClick={onToggleFavorite} size={18} />
         </div>
 
         {/* Password */}
         {item.type === 'password' && (
           <Section>
             {item.url && <DetailRow label="URL">
-              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, wordBreak: 'break-all' }}>
+              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, fontWeight: 500, textDecoration: 'none', wordBreak: 'break-all' }}>
                 {item.url}
               </a>
             </DetailRow>}
@@ -972,7 +1081,7 @@ const ItemCard = React.memo(function ItemCard({ item, selected, onSelect, onTogg
     <div id={`item-${item.id}`} role="option" tabIndex={selected ? 0 : -1} aria-selected={selected} className="list-item" style={{ cursor: 'pointer' }}
       onClick={() => onSelect(item)}
     >
-      <span className="tile"><TypeIcon type={item.type} size={15} color="currentColor" /></span>
+      <ItemAvatar item={item} size={38} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="list-item__title">{item.title}</div>
         <div className="list-item__sub">{itemSubtitle(item)}</div>
@@ -1000,6 +1109,16 @@ const ItemCard = React.memo(function ItemCard({ item, selected, onSelect, onTogg
   );
 });
 
+function ItemAvatar({ item, size, className }: { item: VaultItem; size: number; className?: string }) {
+  const letter = (item.title.trim()[0] ?? '?').toUpperCase();
+  return (
+    <span className={`avatar${className ? ` ${className}` : ''}`} aria-hidden
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}>
+      {letter}
+    </span>
+  );
+}
+
 function FavoriteStar({ on, onClick, size }: { on: boolean; onClick: (e: React.MouseEvent) => void; size: number }) {
   return (
     <button type="button" className="star" aria-pressed={on} onClick={onClick}
@@ -1026,13 +1145,8 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function partialMask(val: string): string {
-  if (val.includes('@')) {
-    const [local, domain] = val.split('@');
-    if (local.length <= 2) return `${'•'.repeat(local.length)}@${domain}`;
-    return `${local.slice(0, 2)}${'•'.repeat(Math.min(local.length - 2, 4))}@${domain}`;
-  }
-  return '•'.repeat(Math.min(val.length, 16));
+function partialMask(_val: string): string {
+  return '•'.repeat(12);
 }
 
 function SecretField({ label, value, masked = false, maskFn, onCopy }: {
@@ -1057,8 +1171,8 @@ function SecretField({ label, value, masked = false, maskFn, onCopy }: {
   return (
     <DetailRow label={label}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <span className={masked && !revealed ? undefined : 'mono'} style={{
-          fontSize: 13, color: 'var(--text)', flex: 1, minHeight: 28, display: 'flex', alignItems: 'center',
+        <span className={masked && revealed ? 'mono' : undefined} style={{
+          fontSize: 14, color: 'var(--text)', flex: 1, minHeight: 28, display: 'flex', alignItems: 'center',
           wordBreak: 'break-all', letterSpacing: masked && !revealed ? '0.12em' : 'normal',
         }}>
           {display}
@@ -1114,10 +1228,11 @@ function NavBtn({ children, label, count, active, onClick, compact, dimWhenEmpty
   );
 }
 
-function ToolBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function ToolBtn({ label, text, onClick, children }: { label: string; text?: string; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" className="sidebar__icon-btn" onClick={onClick} aria-label={label} title={label}>
+    <button type="button" className="sidebar__icon-btn" onClick={onClick} aria-label={label} title={text ? undefined : label}>
       {children}
+      {text && <span>{text}</span>}
     </button>
   );
 }

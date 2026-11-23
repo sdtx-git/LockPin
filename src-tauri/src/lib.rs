@@ -44,6 +44,16 @@ fn app_base() -> PathBuf {
 #[cfg(all(not(target_os = "windows"), not(mobile)))]
 fn app_base() -> PathBuf {
     use std::os::unix::fs::DirBuilderExt;
+    if let Some(dir) = std::env::var_os("LOCKPIN_DATA_DIR")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute() && p.is_dir())
+        .or_else(|| std::env::var_os("APPIMAGE")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .and_then(|p| p.parent().map(|d| d.to_path_buf())))
+    {
+        return dir;
+    }
     let base = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
@@ -57,19 +67,22 @@ fn app_base() -> PathBuf {
 
 // Grava com permissão 0600 em sistemas Unix.
 fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     {
-        use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true).create(true).truncate(true).mode(0o600)
-            .open(path)?;
-        f.write_all(data)
+        options.mode(0o600);
     }
-    #[cfg(not(unix))]
-    {
-        std::fs::write(path, data)
-    }
+    let mut f = options.open(&tmp)?;
+    f.write_all(data)?;
+    f.sync_all()?;
+    drop(f);
+    std::fs::rename(&tmp, path)
 }
 
 fn vault_file_path(vault_id: &str) -> PathBuf {
@@ -586,5 +599,29 @@ mod tests {
             assert!(check_rate_limit(&attempts, 3, Duration::from_secs(60)).is_ok());
         }
         assert!(check_rate_limit(&attempts, 3, Duration::from_secs(60)).is_err());
+    }
+
+    #[test]
+    fn write_private_replaces_without_leftover() {
+        let dir = std::env::temp_dir().join(format!("lockpin-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("vault-x.enc");
+        write_private(&path, b"first").unwrap();
+        write_private(&path, b"second").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"second");
+        assert!(!dir.join("vault-x.enc.tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(mobile)))]
+    #[test]
+    fn app_base_follows_portable_location() {
+        std::env::set_var("APPIMAGE", "/media/usb/LockPin/LockPin.AppImage");
+        assert_eq!(app_base(), PathBuf::from("/media/usb/LockPin"));
+        let dir = std::env::temp_dir();
+        std::env::set_var("LOCKPIN_DATA_DIR", &dir);
+        assert_eq!(app_base(), dir);
+        std::env::remove_var("LOCKPIN_DATA_DIR");
+        std::env::remove_var("APPIMAGE");
     }
 }

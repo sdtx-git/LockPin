@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Logo } from '@ui/components/atoms';
+import { Button, Logo, TitleBar } from '@ui/components/atoms';
 import { useToast, Modal } from '@ui/components/organisms';
 import { saveVault, loadVault, setRecoveryKey, checkAuthMode, saveAuthInfo, deleteAuthInfo, deleteVaultData, getDpapiMasterKey, findVaultByRecoveryWords } from '@core/vault/storage';
 import { invoke } from '@tauri-apps/api/core';
@@ -24,6 +24,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
   const [attempts, setAttempts]       = useState(0);
   const [lockoutUntil, setLockout]    = useState<number | null>(null);
   const [helloAvailable, setHelloAvailable] = useState(false);
+  const helloLinked = !!localStorage.getItem('lockpin-hello-vaultid');
   const { addToast } = useToast();
 
   React.useEffect(() => {
@@ -180,25 +181,49 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
   };
 
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      padding: 24, background: 'var(--canvas)', overflowY: 'auto',
-    }}>
-      <div style={{ width: '100%', maxWidth: 380 }}>
-        {/* Marca */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+    <div className="auth">
+      <TitleBar floating />
+      <aside className="auth__brand">
+        <div className="auth__brand-row">
+          <Logo size={34} />
+          <span>LockPin</span>
+        </div>
+        <div>
+          <h2 className="auth__headline">Seu cofre,<br />em qualquer lugar.</h2>
+          <p className="auth__lead">Senhas, cartões e notas cifrados no seu dispositivo. Sem conta, sem servidor e sem nuvem.</p>
+          <ul className="auth__facts">
+            <li>
+              <span className="auth__fact-icon"><svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={4} y={10} width={16} height={11} rx={2} /><path d="M8 10V7a4 4 0 018 0v3" /></svg></span>
+              <div><strong>AES-256-GCM</strong><span>O vault é cifrado com a sua senha mestra.</span></div>
+            </li>
+            <li>
+              <span className="auth__fact-icon"><svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" /></svg></span>
+              <div><strong>Argon2id</strong><span>Derivação de chave resistente a força bruta.</span></div>
+            </li>
+            <li>
+              <span className="auth__fact-icon"><svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={7} y={2} width={10} height={9} rx={1} /><rect x={5} y={11} width={14} height={11} rx={2} /><path d="M10 5h1M13 5h1" /></svg></span>
+              <div><strong>Portátil</strong><span>Windows e Linux usando o mesmo vault.</span></div>
+            </li>
+          </ul>
+        </div>
+        <span className="auth__version">{APP_NAME} {APP_VERSION}</span>
+      </aside>
+
+      <main className="auth__main">
+      <div className="auth__panel">
+        <div className="auth__compact-brand">
           <Logo size={32} />
-          <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--text)' }}>LockPin</span>
+          <span>LockPin</span>
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.25, color: 'var(--text)' }}>
-          {isRegister ? 'Criar um vault' : 'Desbloquear o vault'}
+        <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1.2, color: 'var(--text)' }}>
+          {isRegister ? 'Criar um vault' : 'Bem-vindo de volta'}
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6, marginBottom: 22 }}>
-          {isRegister ? 'Defina a senha mestra. Ela não pode ser redefinida sem a frase de recuperação.' : 'Digite sua senha mestra para continuar.'}
+        <p style={{ fontSize: 13.5, color: 'var(--text-3)', marginTop: 6, marginBottom: 24 }}>
+          {isRegister ? 'Defina a senha mestra. Ela não pode ser redefinida sem a frase de recuperação.' : 'Digite sua senha mestra para desbloquear o vault.'}
         </p>
 
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card auth__card">
           <div className="segmented" style={{ marginBottom: 18 }}>
             {(['login', 'register'] as Mode[]).map(m => (
               <button key={m} type="button" aria-pressed={mode === m} onClick={() => switchMode(m)}>
@@ -273,7 +298,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
                 : (isRegister ? 'Criar vault' : 'Desbloquear')}
             </Button>
 
-            {!isRegister && helloAvailable && (
+            {!isRegister && helloAvailable && helloLinked && (
               <Button variant="secondary" size="lg" fullWidth onClick={handleWindowsHello}>
                 Entrar com Windows Hello
               </Button>
@@ -285,13 +310,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
           {!isRegister
             ? <button type="button" className="link-btn" onClick={() => setShowRecovery(true)}>Esqueci a senha mestra</button>
             : <span />}
-          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{APP_NAME} {APP_VERSION}</span>
+          <span className="auth__compact-version">{APP_NAME} {APP_VERSION}</span>
         </div>
 
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 28, lineHeight: 1.55 }}>
-          Seus dados ficam só neste computador, cifrados com AES-256-GCM. Não há conta, servidor nem sincronização.
+        <p className="auth__compact-note">
+          Seus dados ficam cifrados neste dispositivo com AES-256-GCM. Não há conta, servidor nem sincronização.
         </p>
       </div>
+      </main>
 
       {/* Recuperação */}
       <Modal

@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('build', 'up', 'sync', 'test', 'run', 'shell', 'down', 'android-init', 'apk')]
+  [ValidateSet('build', 'up', 'sync', 'test', 'run', 'shell', 'down', 'android-init', 'apk', 'portable')]
   [string]$Command = 'test'
 )
 
@@ -44,14 +44,32 @@ function Start-Dev {
     $Image | Out-Null
 }
 
-function Sync-Source {
-  Start-Dev
-  & "$env:SystemRoot\System32\tar.exe" -cf $Tar -C $Root --exclude node_modules --exclude dist --exclude .git --exclude ./src-tauri/target --exclude ./build-android --exclude ./src-tauri/gen/android/app/build --exclude ./src-tauri/gen/android/build --exclude ./src-tauri/gen/android/.gradle .
+function Sync-Source([string]$Target = $Container) {
+  if ($Target -eq $Container) { Start-Dev }
+  & "$env:SystemRoot\System32\tar.exe" -cf $Tar -C $Root --exclude node_modules --exclude dist --exclude .git --exclude ./src-tauri/target --exclude ./build-android --exclude ./build-portable --exclude ./src-tauri/gen/android/app/build --exclude ./src-tauri/gen/android/build --exclude ./src-tauri/gen/android/.gradle .
   if ($LASTEXITCODE -ne 0) { throw "tar falhou (exit $LASTEXITCODE)" }
-  Invoke-Docker cp $Tar "${Container}:/tmp/src.tar"
+  Invoke-Docker cp $Tar "${Target}:/tmp/src.tar"
   Remove-Item $Tar
-  Invoke-Docker exec $Container sh -c 'rm -rf /tmp/src && mkdir /tmp/src && tar -xf /tmp/src.tar -C /tmp/src && rsync -a --delete --exclude /node_modules --exclude /src-tauri/target --exclude /src-tauri/gen/android/app/build --exclude /src-tauri/gen/android/build --exclude /src-tauri/gen/android/.gradle /tmp/src/ /app/'
-  Invoke-Docker exec $Container sh -c 'sha256sum package-lock.json > /tmp/lock-hash; cmp -s /tmp/lock-hash node_modules/.lock-hash || { npm ci && cp /tmp/lock-hash node_modules/.lock-hash; }'
+  Invoke-Docker exec $Target sh -c 'rm -rf /tmp/src && mkdir /tmp/src && tar -xf /tmp/src.tar -C /tmp/src && rsync -a --delete --exclude /node_modules --exclude /src-tauri/target --exclude /src-tauri/gen/android/app/build --exclude /src-tauri/gen/android/build --exclude /src-tauri/gen/android/.gradle /tmp/src/ /app/'
+  Invoke-Docker exec $Target sh -c 'sha256sum package-lock.json > /tmp/lock-hash; cmp -s /tmp/lock-hash node_modules/.lock-hash || { npm ci && cp /tmp/lock-hash node_modules/.lock-hash; }'
+}
+
+function Start-Portable {
+  $image = 'lockpin-portable'
+  if (-not (docker image ls -q $image)) {
+    Invoke-Docker build -t $image -f (Join-Path $Root 'docker/Dockerfile.portable') (Join-Path $Root 'docker') | Out-Host
+  }
+  if (docker ps -aq --filter "name=^${image}$") {
+    if (-not (docker ps -q --filter "name=^${image}$")) { Invoke-Docker start $image | Out-Null }
+  } else {
+    Invoke-Docker run -d --name $image `
+      -v lockpin-portable-node-modules:/app/node_modules `
+      -v lockpin-portable-target:/app/src-tauri/target `
+      -v lockpin-portable-registry:/usr/local/cargo/registry `
+      -v lockpin-portable-cache:/root/.cache `
+      $image | Out-Null
+  }
+  return $image
 }
 
 switch ($Command) {
@@ -96,5 +114,20 @@ switch ($Command) {
     if (Test-Path $out) { Remove-Item -Recurse -Force $out }
     Invoke-Docker cp "${Container}:/app/src-tauri/gen/android/app/build/outputs/apk" $out
     Get-ChildItem $out -Recurse -Filter *.apk | ForEach-Object { Write-Host "APK: $($_.FullName)" -ForegroundColor Green }
+  }
+  'portable' {
+    $ctr = Start-Portable
+    Sync-Source $ctr
+    Write-Host '==> Linux (AppImage)' -ForegroundColor Cyan
+    Invoke-Docker exec $ctr npx tauri build --bundles appimage
+    Write-Host '==> Windows (exe)' -ForegroundColor Cyan
+    Invoke-Docker exec $ctr npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle
+    $out = Join-Path $Root 'build-portable/LockPin'
+    New-Item -ItemType Directory -Force $out | Out-Null
+    Invoke-Docker exec $ctr sh -c 'cp src-tauri/target/release/bundle/appimage/*.AppImage /tmp/LockPin.AppImage'
+    Invoke-Docker cp "${ctr}:/tmp/LockPin.AppImage" (Join-Path $out 'LockPin.AppImage')
+    Invoke-Docker cp "${ctr}:/app/src-tauri/target/x86_64-pc-windows-msvc/release/lockpin.exe" (Join-Path $out 'LockPin.exe')
+    Copy-Item (Join-Path $Root 'docker/LockPin.sh') (Join-Path $out 'LockPin.sh') -Force
+    Write-Host "Pasta portátil: $out" -ForegroundColor Green
   }
 }

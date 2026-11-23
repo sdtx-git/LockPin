@@ -48,6 +48,7 @@ export const Modal: React.FC<ModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      className="dialog"
       style={{
         position: 'fixed', inset: 0, zIndex: tokens.zIndex.modal,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -59,6 +60,7 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         ref={panelRef}
         tabIndex={-1}
+        className="dialog__panel"
         style={{
           position: 'relative', zIndex: 1,
           width: '100%', maxWidth: maxWidths[size],

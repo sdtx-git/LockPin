@@ -2,7 +2,7 @@
   "name": "lockpin-v3",
   "version": "3.0.0",
   "private": true,
-  "description": "LockPin Enterprise — Gerenciador de senhas zero-knowledge multi-tenant",
+  "description": "LockPin — Gerenciador de senhas zero-knowledge",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { tokens as darkTokens } from '@ui/design-system/tokens';
 
 type Theme = 'dark' | 'light';
-export type Palette = 'atual' | 'cofre' | 'tecnico' | 'mono' | 'contraste';
+export type Palette = 'atual' | 'cofre' | 'tecnico' | 'mono' | 'contraste' | 'amoled' | 'floresta' | 'oceano' | 'ametista' | 'vinho' | 'terracota';
 
 export const PALETTES: { id: Palette; label: string; description: string; swatches: string[] }[] = [
   { id: 'atual', label: 'Petróleo', description: 'A paleta original do LockPin.', swatches: ['#12222c', '#f3f5f6', '#1a6a85'] },
@@ -10,6 +10,12 @@ export const PALETTES: { id: Palette; label: string; description: string; swatch
   { id: 'tecnico', label: 'Técnico', description: 'Neutros frios com verde-petróleo vivo.', swatches: ['oklch(0.2 0.02 240)', 'oklch(0.97 0.005 230)', 'oklch(0.62 0.11 195)'] },
   { id: 'mono', label: 'Monocromático', description: 'Só preto, branco e cinzas.', swatches: ['oklch(0.965 0.002 260)', 'oklch(1 0 0)', 'oklch(0.18 0.003 260)'] },
   { id: 'contraste', label: 'Alto contraste', description: 'Preto e branco puros, bordas fortes, texto AAA.', swatches: ['oklch(0 0 0)', 'oklch(1 0 0)', 'oklch(0.4 0.09 215)'] },
+  { id: 'amoled', label: 'AMOLED', description: 'Preto puro no escuro, poupa bateria em telas OLED. Acento magenta.', swatches: ['oklch(0 0 0)', 'oklch(0.1 0 0)', 'oklch(0.74 0.19 350)'] },
+  { id: 'floresta', label: 'Floresta', description: 'Fundos verdes com acento esmeralda.', swatches: ['oklch(0.26 0.05 160)', 'oklch(0.955 0.02 160)', 'oklch(0.5 0.11 155)'] },
+  { id: 'oceano', label: 'Oceano', description: 'Azul-marinho profundo com azul vivo.', swatches: ['oklch(0.26 0.06 250)', 'oklch(0.955 0.02 245)', 'oklch(0.52 0.15 250)'] },
+  { id: 'ametista', label: 'Ametista', description: 'Violeta saturado com acento roxo.', swatches: ['oklch(0.25 0.07 300)', 'oklch(0.955 0.02 300)', 'oklch(0.5 0.17 305)'] },
+  { id: 'vinho', label: 'Vinho', description: 'Bordô quente com acento rosé.', swatches: ['oklch(0.25 0.07 15)', 'oklch(0.955 0.015 15)', 'oklch(0.48 0.15 15)'] },
+  { id: 'terracota', label: 'Terracota', description: 'Argila e areia com laranja queimado.', swatches: ['oklch(0.27 0.05 40)', 'oklch(0.955 0.02 60)', 'oklch(0.52 0.15 40)'] },
 ];
 
 interface ThemeContextValue {
