@@ -1,25 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4a9fb9"/>
-      <stop offset="0.48" stop-color="#1a6a85"/>
-      <stop offset="1" stop-color="#0e4254"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#17384a"/>
+      <stop offset="0.7" stop-color="#0a1a21"/>
     </linearGradient>
     <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.24"/>
-      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.4" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <mask id="keyhole">
-      <rect x="4.5" y="10" width="15" height="11.5" rx="3.2" fill="#fff"/>
-      <circle cx="12" cy="14.6" r="1.75" fill="#000"/>
-      <path d="M11.15 15.5h1.7l.45 3h-2.6z" fill="#000"/>
-    </mask>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b9862c"/><stop offset="0.45" stop-color="#f3d58e"/><stop offset="1" stop-color="#a87623"/>
+    </linearGradient>
+    <linearGradient id="brassDark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8f6420"/><stop offset="0.45" stop-color="#d6a854"/><stop offset="1" stop-color="#7e561b"/>
+    </linearGradient>
   </defs>
   <rect x="64" y="64" width="896" height="896" rx="236" fill="url(#bg)"/>
   <rect x="64" y="64" width="896" height="896" rx="236" fill="url(#shine)"/>
-  <rect x="65.5" y="65.5" width="893" height="893" rx="234.5" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3"/>
-  <g transform="translate(234 234) scale(23.17)">
-    <path d="M7.75 10.5V7.75a4.25 4.25 0 0 1 8.5 0v2.75" fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round"/>
-    <rect x="4.5" y="10" width="15" height="11.5" rx="3.2" fill="#ffffff" mask="url(#keyhole)"/>
+  <rect x="65.5" y="65.5" width="893" height="893" rx="234.5" fill="none" stroke="#7cc3d6" stroke-opacity="0.16" stroke-width="3"/>
+  <g transform="translate(112 120) scale(8)">
+    <rect x="20.5" y="24" width="8" height="27" rx="4" fill="url(#brass)"/>
+    <path d="M20.5 54.5h8v15a4 4 0 0 1-8 0z" fill="url(#brassDark)"/>
+    <rect x="33.5" y="31" width="8" height="20" rx="4" fill="url(#brass)"/>
+    <path d="M33.5 54.5h8v8a4 4 0 0 1-8 0z" fill="url(#brassDark)"/>
+    <rect x="46" y="20" width="8" height="31" rx="4" fill="url(#brass)"/>
+    <path d="M46 54.5h8v19a4 4 0 0 1-8 0z" fill="url(#brassDark)"/>
+    <rect x="58.5" y="28" width="8" height="23" rx="4" fill="url(#brass)"/>
+    <path d="M58.5 54.5h8v12a4 4 0 0 1-8 0z" fill="url(#brassDark)"/>
+    <rect x="71.5" y="34" width="8" height="17" rx="4" fill="url(#brass)"/>
+    <path d="M71.5 54.5h8v6a4 4 0 0 1-8 0z" fill="url(#brassDark)"/>
+    <rect x="12" y="52.2" width="76" height="1.8" rx="0.9" fill="#5fb2cd"/>
   </g>
 </svg>

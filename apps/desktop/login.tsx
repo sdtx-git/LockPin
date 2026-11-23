@@ -34,6 +34,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
   const isLockedOut = lockoutUntil !== null && Date.now() < lockoutUntil;
   const lockoutRemaining = lockoutUntil ? Math.ceil((lockoutUntil - Date.now()) / 1000) : 0;
   const isRegister = mode === 'register';
+  const pinOffsets = React.useMemo(() => {
+    const base = [-5, 4, -3, 6, -4];
+    return base.map((_, i) => base[(i + password.length) % base.length]);
+  }, [password.length]);
 
   const switchMode = (next: Mode) => {
     setMode(next); setPassword(''); setConfirm(''); setErrors({});
@@ -183,54 +187,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
   return (
     <div className="auth">
       <TitleBar floating />
-      <aside className="auth__brand">
-        <div className="auth__brand-row">
-          <Logo size={34} />
-          <span>LockPin</span>
-        </div>
-        <div>
-          <h2 className="auth__headline">Seu cofre,<br />em qualquer lugar.</h2>
-          <p className="auth__lead">Senhas, cartões e notas cifrados no seu dispositivo. Sem conta, sem servidor e sem nuvem.</p>
-          <ul className="auth__facts">
-            <li>
-              <span className="auth__fact-icon"><svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={4} y={10} width={16} height={11} rx={2} /><path d="M8 10V7a4 4 0 018 0v3" /></svg></span>
-              <div><strong>AES-256-GCM</strong><span>O vault é cifrado com a sua senha mestra.</span></div>
-            </li>
-            <li>
-              <span className="auth__fact-icon"><svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" /></svg></span>
-              <div><strong>Argon2id</strong><span>Derivação de chave resistente a força bruta.</span></div>
-            </li>
-            <li>
-              <span className="auth__fact-icon"><svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={7} y={2} width={10} height={9} rx={1} /><rect x={5} y={11} width={14} height={11} rx={2} /><path d="M10 5h1M13 5h1" /></svg></span>
-              <div><strong>Portátil</strong><span>Windows e Linux usando o mesmo vault.</span></div>
-            </li>
-          </ul>
-        </div>
-        <span className="auth__version">{APP_NAME} {APP_VERSION}</span>
-      </aside>
+      <div className="auth__stage" aria-hidden>
+        <span className="auth__shear" />
+        <Logo size={168} offsets={loading ? undefined : pinOffsets} />
+      </div>
 
       <main className="auth__main">
       <div className="auth__panel">
-        <div className="auth__compact-brand">
-          <Logo size={32} />
-          <span>LockPin</span>
-        </div>
-
-        <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1.2, color: 'var(--text)' }}>
-          {isRegister ? 'Criar um vault' : 'Bem-vindo de volta'}
-        </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--text-3)', marginTop: 6, marginBottom: 24 }}>
-          {isRegister ? 'Defina a senha mestra. Ela não pode ser redefinida sem a frase de recuperação.' : 'Digite sua senha mestra para desbloquear o vault.'}
+        <h1 className="auth__title">Lock<span className="brand-pin">Pin</span></h1>
+        <p className="auth__sub">
+          {isRegister ? 'Crie a senha mestra do seu vault. Ela não pode ser redefinida sem a frase de recuperação.' : 'Digite a senha mestra para alinhar os pinos.'}
         </p>
 
-        <div className="card auth__card">
-          <div className="segmented" style={{ marginBottom: 18 }}>
-            {(['login', 'register'] as Mode[]).map(m => (
-              <button key={m} type="button" aria-pressed={mode === m} onClick={() => switchMode(m)}>
-                {m === 'login' ? 'Entrar' : 'Criar vault'}
-              </button>
-            ))}
-          </div>
+        <div className="auth__form">
 
           {isRegister && hasExistingVault && (
             <p className="note" style={{ marginBottom: 16 }}>
@@ -306,18 +275,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, hasExi
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 12 }}>
+        <div className="auth__links">
           {!isRegister
             ? <button type="button" className="link-btn" onClick={() => setShowRecovery(true)}>Esqueci a senha mestra</button>
             : <span />}
-          <span className="auth__compact-version">{APP_NAME} {APP_VERSION}</span>
+          {isRegister
+            ? (hasExistingVault && <button type="button" className="link-btn" onClick={() => switchMode('login')}>Já tenho um vault</button>)
+            : <button type="button" className="link-btn" onClick={() => switchMode('register')}>Criar outro vault</button>}
         </div>
-
-        <p className="auth__compact-note">
-          Seus dados ficam cifrados neste dispositivo com AES-256-GCM. Não há conta, servidor nem sincronização.
-        </p>
       </div>
       </main>
+
+      <footer className="auth__foot">AES-256-GCM · Argon2id · sem conta, sem nuvem · {APP_NAME} {APP_VERSION}</footer>
 
       {/* Recuperação */}
       <Modal

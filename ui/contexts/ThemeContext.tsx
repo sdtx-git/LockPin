@@ -2,9 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { tokens as darkTokens } from '@ui/design-system/tokens';
 
 type Theme = 'dark' | 'light';
-export type Palette = 'atual' | 'cofre' | 'tecnico' | 'mono' | 'contraste' | 'amoled' | 'floresta' | 'oceano' | 'ametista' | 'vinho' | 'terracota';
+export type Palette = 'lockpin' | 'atual' | 'cofre' | 'tecnico' | 'mono' | 'contraste' | 'amoled' | 'floresta' | 'oceano' | 'ametista' | 'vinho' | 'terracota';
 
 export const PALETTES: { id: Palette; label: string; description: string; swatches: string[] }[] = [
+  { id: 'lockpin', label: 'LockPin', description: 'Petróleo profundo com latão. A identidade da marca.', swatches: ['#0b171c', '#0f1d23', '#e2b866'] },
   { id: 'atual', label: 'Petróleo', description: 'A paleta original do LockPin.', swatches: ['#12222c', '#f3f5f6', '#1a6a85'] },
   { id: 'cofre', label: 'Cofre', description: 'Grafite quente com acento latão.', swatches: ['oklch(0.205 0.01 60)', 'oklch(0.965 0.006 75)', 'oklch(0.72 0.1 80)'] },
   { id: 'tecnico', label: 'Técnico', description: 'Neutros frios com verde-petróleo vivo.', swatches: ['oklch(0.2 0.02 240)', 'oklch(0.97 0.005 230)', 'oklch(0.62 0.11 195)'] },
@@ -31,14 +32,18 @@ const ThemeContext = createContext<ThemeContextValue>({
   theme: 'dark',
   toggle: () => {},
   setTheme: () => {},
-  palette: 'atual',
+  palette: 'lockpin',
   setPalette: () => {},
   tokens: darkTokens,
 });
 
 function savedPalette(): Palette {
+  if (!localStorage.getItem('lockpin-brand-v1')) {
+    localStorage.setItem('lockpin-brand-v1', '1');
+    localStorage.setItem('lockpin-palette', 'lockpin');
+  }
   const saved = localStorage.getItem('lockpin-palette');
-  return PALETTES.some(p => p.id === saved) ? (saved as Palette) : 'atual';
+  return PALETTES.some(p => p.id === saved) ? (saved as Palette) : 'lockpin';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

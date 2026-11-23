@@ -347,10 +347,10 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
       {/* ══ PANE 1 — Sidebar ══════════════════════════════════════════════════ */}
       {mobile && drawerOpen && <div className="drawer-backdrop" onClick={popNav} />}
       <aside className={`sidebar${mobile ? ` sidebar--drawer${drawerOpen ? ' is-open' : ''}` : ''}`} style={{ width: mobile ? 280 : collapsed ? 56 : 224 }} aria-hidden={mobile && !drawerOpen ? true : undefined}>
-        <div data-tauri-drag-region style={{ height: 56, padding: collapsed ? 0 : '0 10px 0 14px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10, flexShrink: 0 }}>
+        <div data-tauri-drag-region className="sidebar__head" style={{ height: 56, padding: collapsed ? 0 : '0 10px 0 14px', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10, flexShrink: 0 }}>
           {!collapsed && <>
             <Logo size={26} />
-            <span data-tauri-drag-region style={{ flex: 1, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--sidebar-text-strong)' }}>LockPin</span>
+            <span data-tauri-drag-region style={{ flex: 1, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--sidebar-text-strong)' }}>Lock<span className="brand-pin">Pin</span></span>
           </>}
           {!mobile && <button className="sidebar__icon-btn" onClick={() => setSidebarCollapsed(v => !v)}
             aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'} title={collapsed ? 'Expandir menu' : 'Recolher menu'}>
@@ -485,7 +485,7 @@ export const VaultScreen: React.FC<VaultScreenProps> = ({
                 <span className="list-head__count">{filtered.length}</span>
               </div>
             </div>
-            <div role="listbox" aria-label="Itens do vault" onKeyDown={onListKey} style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
+            <div role="listbox" aria-label="Itens do vault" onKeyDown={onListKey} style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 8px' }}>
               {filtered.length === 0 ? (
                 <div className="empty empty--sm">
                   <span className="empty__mark">{search ? <SearchIcon /> : <FilterIcon filter={filter} />}</span>
@@ -772,10 +772,8 @@ async function handleAttachDrop(e: React.DragEvent, vault: VaultData, onVaultCha
 
 function EmptyDetailPane() {
   return (
-    <div className="empty" style={{ flex: 1 }}>
-      <span className="avatar empty__avatar" aria-hidden>
-        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}><rect x={4} y={10} width={16} height={11} rx={2} /><path d="M8 10V7a4 4 0 018 0v3" /></svg>
-      </span>
+    <div className="empty empty--brand" style={{ flex: 1 }}>
+      <span className="empty__pins"><Logo size={112} /></span>
       <p className="empty__title" style={{ fontSize: 15 }}>Nenhum item selecionado</p>
       <p className="empty__text">Escolha um item na lista para ver os detalhes.</p>
       <div className="empty__shortcuts">
@@ -795,7 +793,7 @@ function EmptyVaultPane({ onCreate, onImport }: { onCreate: (type: VaultItemType
   ];
   return (
     <div className="welcome">
-      <Logo size={64} />
+      <Logo size={120} />
       <h2 className="welcome__title">Seu vault está pronto</h2>
       <p className="welcome__text">Guarde o primeiro item. Tudo fica cifrado neste dispositivo, sem conta e sem nuvem.</p>
       <div className="welcome__grid">
