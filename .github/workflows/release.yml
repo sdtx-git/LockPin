@@ -59,3 +59,41 @@ jobs:
             src-tauri/target/release/bundle/rpm/*.rpm
             src-tauri/target/release/bundle/appimage/*.AppImage
           generate_release_notes: true
+
+      - name: Keep portable binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ runner.os }}
+          path: |
+            src-tauri/target/release/lockpin.exe
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+  portable:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: artifacts
+
+      - name: Assemble portable folder
+        run: |
+          mkdir -p LockPin
+          cp "$(find artifacts -name 'lockpin.exe' | head -n1)" LockPin/LockPin.exe
+          cp "$(find artifacts -name '*.AppImage' | head -n1)" LockPin/LockPin.AppImage
+          cp docker/LockPin.sh LockPin/LockPin.sh
+          chmod +x LockPin/LockPin.AppImage LockPin/LockPin.sh
+          zip -r "LockPin-portable-${GITHUB_REF_NAME}.zip" LockPin
+
+      - name: Upload portable package
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LockPin-portable-*.zip

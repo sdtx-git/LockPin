@@ -28,9 +28,37 @@ fn safe_filename(value: &str) -> Result<&str, String> {
 
 // Windows: ao lado do executável. Demais: diretório de dados do usuário (XDG).
 #[cfg(target_os = "windows")]
+static WINDOWS_BASE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "windows")]
 fn app_base() -> PathBuf {
-    let exe = std::env::current_exe().expect("failed to resolve executable path");
-    exe.parent().expect("executable has no parent").to_path_buf()
+    WINDOWS_BASE.get_or_init(|| {
+        let exe = std::env::current_exe().expect("failed to resolve executable path");
+        let exe_dir = exe.parent().expect("executable has no parent").to_path_buf();
+        choose_base(&exe_dir, || {
+            let base = PathBuf::from(std::env::var_os("APPDATA").expect("APPDATA not set")).join("LockPin");
+            let _ = std::fs::create_dir_all(&base);
+            base
+        })
+    }).clone()
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn choose_base(exe_dir: &std::path::Path, fallback: impl FnOnce() -> PathBuf) -> PathBuf {
+    if exe_dir.join("vaults.auth").exists() || dir_is_writable(exe_dir) {
+        exe_dir.to_path_buf()
+    } else {
+        fallback()
+    }
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn dir_is_writable(dir: &std::path::Path) -> bool {
+    let probe = dir.join(format!(".lockpin-write-{}", std::process::id()));
+    match std::fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(_) => { let _ = std::fs::remove_file(&probe); true }
+        Err(_) => false,
+    }
 }
 
 #[cfg(mobile)]
@@ -610,6 +638,16 @@ mod tests {
         write_private(&path, b"second").unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"second");
         assert!(!dir.join("vault-x.enc.tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn choose_base_prefers_writable_or_existing_exe_dir() {
+        let dir = std::env::temp_dir().join(format!("lockpin-base-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(choose_base(&dir, || PathBuf::from("/fallback")), dir);
+        let missing = dir.join("missing");
+        assert_eq!(choose_base(&missing, || PathBuf::from("/fallback")), PathBuf::from("/fallback"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

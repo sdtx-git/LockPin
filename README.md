@@ -1,16 +1,20 @@
 <div align="center">
 
-# 🔐 LockPin
+<img src="src-tauri/icons/app-icon.svg" width="96" alt="LockPin logo: five brass pins split at the shear line" />
+
+# LockPin
 
 **Local-first, zero-knowledge password manager built with Tauri v2, Rust and React.**
+
+*Like the pins of a lock, only the right key lines everything up.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.80+-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-0078D4)](https://github.com/sdtx-git/LockPin/releases)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Portable-0078D4)](https://github.com/sdtx-git/LockPin/releases)
 
-Your passwords never leave your machine. No accounts. No cloud sync. No telemetry.
+Your passwords never leave your device. No accounts. No cloud sync. No telemetry.
 
 </div>
 
@@ -21,6 +25,7 @@ Your passwords never leave your machine. No accounts. No cloud sync. No telemetr
 Most password managers store your data in their cloud and charge a monthly fee for the privilege. LockPin takes the opposite approach: **your vault lives on your disk, encrypted, and only you hold the key.**
 
 - **Air-gap friendly** — works fully offline, always
+- **Portable** — one folder on a USB drive runs on Windows and Linux with the same vault
 - **No vendor lock-in** — open source, your data stays yours
 - **Zero-knowledge** — the app never sees your plaintext passwords
 - **Native performance** — Rust backend, sub-100ms unlock
@@ -61,9 +66,11 @@ Most password managers store your data in their cloud and charge a monthly fee f
 | **Backups** | Auto-backup at most every 10 minutes to `backups/vault-{id}-{timestamp}.enc`, keeping the 20 most recent per vault |
 
 ### UX
+- Brand identity built on the pin tumbler: brass pins split at a blue shear line; on the login screen the pins shift as you type and align on unlock
 - Dark and light theme with live switching
-- Five color palettes in Settings (Petróleo, Cofre, Técnico, Monocromático, Alto contraste), each in light and dark
-- Keyboard shortcut navigation
+- Twelve color palettes in Settings, each in light and dark: LockPin (default: deep petrol and brass), Petróleo, Cofre, Técnico, Monocromático, Alto contraste, AMOLED, Floresta, Oceano, Ametista, Vinho, Terracota
+- Responsive layout: below 720px the sidebar becomes a drawer, list and detail become separate screens, dialogs become bottom sheets
+- Keyboard shortcut navigation (`Ctrl N` new item, `Ctrl F` search, `Ctrl L` lock)
 - Password strength indicator
 - Collapsible sidebar with collection and folder views
 
@@ -72,19 +79,24 @@ Most password managers store your data in their cloud and charge a monthly fee f
 ## Architecture
 
 ```
-lockpin-v3/
-├── src-tauri/          # Rust backend (Tauri v2)
-│   └── src/lib.rs      # Argon2, AES, DPAPI, rate limiter, file I/O
+LockPin/
+├── src-tauri/                  # Rust backend (Tauri v2)
+│   ├── src/lib.rs              # Argon2, DPAPI, rate limiter, atomic file I/O, data location
+│   ├── icons/app-icon.svg      # Source of every app icon (npx tauri icon)
+│   └── gen/android/            # Android project (custom MainActivity and manifest)
 ├── core/
-│   ├── crypto/         # AES-256-GCM, PBKDF2, HMAC
-│   └── vault/          # Storage, types, TOTP, import/export, health
-├── apps/desktop/       # Main UI screens (Login, Vault, FolderPane)
+│   ├── crypto/                 # AES-256-GCM, PBKDF2, HMAC
+│   └── vault/                  # Storage, types, TOTP, import/export, health
+├── apps/desktop/               # Screens: Login, Vault, FolderPane, VaultItemDialog
 ├── ui/
-│   ├── components/     # Atoms, molecules, organisms (Modal, Toast, etc.)
-│   ├── contexts/       # ThemeContext, useDebounce, useKeyboard
-│   └── design-system/  # Token system (colors, spacing, typography)
-├── shared/             # Constants, types, utils
-└── src/main.tsx        # React root, auth state, vault lifecycle
+│   ├── components/             # Atoms (Logo, TitleBar, Button), molecules, organisms (Modal, Toast)
+│   ├── contexts/               # ThemeContext (theme + palette), useDebounce, useKeyboard
+│   └── design-system/          # global.css (tokens and palettes), tokens.ts
+├── shared/                     # Constants, types, utils
+├── src/main.tsx                # React root, auth state, vault lifecycle
+├── docker/                     # Dockerfile.dev, Dockerfile.portable, LockPin.sh launcher
+├── code/docker-dev.ps1         # Build, test, run, APK and portable builds through Docker
+└── .github/workflows/          # Release pipeline (installers + portable zip)
 ```
 
 ### Data flow
@@ -131,7 +143,12 @@ Pre-built installers are available on the [Releases](https://github.com/sdtx-git
 No build tools required:
 
 - **Linux** — `.deb`, `.rpm` or `.AppImage`
-- **Windows** — `.msi` or `.exe`
+- **Windows** — `.msi` or `.exe` installer
+- **Portable** — `LockPin-portable-<version>.zip` with `LockPin.exe`, `LockPin.AppImage` and `LockPin.sh`; unzip it on a USB drive (see [Portable](#portable-removable-drive-windows--linux))
+
+The Windows binaries are not code-signed yet. On Windows 11 with **Smart App Control** turned on, they can be blocked; SmartScreen may also ask for confirmation on first run.
+
+Android is in progress (debug APK builds through Docker); iOS is planned.
 
 ### Data location
 
@@ -139,7 +156,7 @@ No build tools required:
 |---|---|
 | Linux (AppImage / portable) | `$LOCKPIN_DATA_DIR` if set, otherwise next to the `.AppImage` |
 | Linux (other) | `$XDG_DATA_HOME/lockpin` (default `~/.local/share/lockpin`), directory `0700`, files `0600` |
-| Windows | Next to the executable |
+| Windows | Next to the executable when that folder is writable or already holds a vault (portable); otherwise `%APPDATA%\LockPin` (installed under `Program Files`) |
 
 Files are written atomically (temporary file + rename), so removing the drive mid-save keeps the previous version intact.
 
@@ -173,7 +190,7 @@ The installer is output to `src-tauri/target/release/bundle/`.
 
 ### CI / Releases
 
-Pushing a tag triggers the GitHub Actions build pipeline, which compiles on clean Linux and Windows runners and publishes the installers to GitHub Releases automatically:
+Pushing a tag triggers the GitHub Actions build pipeline, which compiles on clean Linux and Windows runners, publishes the installers to GitHub Releases and assembles the portable zip from both builds:
 
 ```bash
 git tag v3.0.1
@@ -230,6 +247,10 @@ LockPin's security rests on three pillars:
 ## Roadmap
 
 - [x] Linux support
+- [x] Portable mode (one USB folder for Windows and Linux)
+- [ ] Android (mobile layout done; release build pending)
+- [ ] Sync between desktop and phone over the local network, end-to-end encrypted, no cloud
+- [ ] Code-signed Windows builds
 - [ ] macOS support
 - [ ] Biometric unlock on Linux
 - [ ] Browser extension (autofill)
