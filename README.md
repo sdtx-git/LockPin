@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="src-tauri/icons/app-icon.svg" width="96" alt="LockPin logo: five brass pins split at the shear line" />
+<img src="src-tauri/icons/app-icon.svg" width="96" alt="Logo do LockPin: cinco pinos de latão divididos na linha de corte" />
 
 # LockPin
 
-**Local-first, zero-knowledge password manager built with Tauri v2, Rust and React.**
+**Gerenciador de senhas local-first e zero-knowledge, feito com Tauri v2, Rust e React.**
 
-*Like the pins of a lock, only the right key lines everything up.*
+*Como os pinos de uma fechadura, só a chave certa alinha tudo.*
 
-**English** · [Português](README.pt-BR.md)
+[English](README.en.md) · **Português**
 
 [![Rust](https://img.shields.io/badge/Rust-1.80+-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
@@ -16,165 +16,165 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20Portable-0078D4)](https://github.com/sdtx-git/LockPin/releases)
 
-Your passwords never leave your device. No accounts. No cloud sync. No telemetry.
+Suas senhas nunca saem do seu dispositivo. Sem contas. Sem sincronização em nuvem. Sem telemetria.
 
 </div>
 
 ---
 
-## Why LockPin?
+## Por que o LockPin?
 
-Most password managers store your data in their cloud and charge a monthly fee for the privilege. LockPin takes the opposite approach: **your vault lives on your disk, encrypted, and only you hold the key.**
+A maioria dos gerenciadores de senhas guarda seus dados na nuvem deles e cobra uma mensalidade por isso. O LockPin faz o contrário: **seu cofre fica no seu disco, criptografado, e só você tem a chave.**
 
-- **Air-gap friendly** — works fully offline, always
-- **Portable** — one folder on a USB drive runs on Windows and Linux with the same vault
-- **No vendor lock-in** — open source, your data stays yours
-- **Zero-knowledge** — the app never sees your plaintext passwords
-- **Native performance** — Rust backend, sub-100ms unlock
+- **Pronto para air-gap** — funciona totalmente offline, sempre
+- **Portátil** — uma pasta num pendrive roda no Windows e no Linux com o mesmo cofre
+- **Sem aprisionamento** — código aberto, seus dados continuam seus
+- **Zero-knowledge** — o app nunca vê suas senhas em texto puro
+- **Desempenho nativo** — backend em Rust, desbloqueio em menos de 100 ms
 
 ---
 
-## Features
+## Funcionalidades
 
-### Security
-| Feature | Details |
+### Segurança
+| Funcionalidade | Detalhes |
 |---|---|
-| **Encryption** | AES-256-GCM with per-vault keys |
-| **Key derivation** | Argon2id (64 MB, 3 iterations) + PBKDF2-SHA-256 (600k iterations) |
-| **Windows Hello** | Biometric/PIN unlock via DPAPI-protected master key (Windows only) |
-| **Duress password** | Opens a separate decoy vault (`vault-decoy-{id}.enc`) without revealing or touching the real one |
-| **Kill switch** | Destroys the vault, its decoy and its backups on specific password entry; attachments are wiped when no other vault remains |
-| **Recovery** | 12-word BIP39-style phrase encrypted separately from the vault |
-| **Auto-lock** | Configurable timeout with 30-second warning |
-| **Anti-debug** | Detects debugger presence (Windows API / Linux `TracerPid`), exits immediately |
-| **Secure delete** | Overwrites vault files with random bytes before removal |
-| **Rate limiting** | Rust-side brute-force protection on all vault operations |
-| **CSP** | Strict Content Security Policy via Tauri's security layer |
+| **Criptografia** | AES-256-GCM com chaves por cofre |
+| **Derivação de chave** | Argon2id (64 MB, 3 iterações) + PBKDF2-SHA-256 (600 mil iterações) |
+| **Windows Hello** | Desbloqueio por biometria/PIN com chave mestra protegida por DPAPI (só Windows) |
+| **Senha de coação** | Abre um cofre isca separado (`vault-decoy-{id}.enc`) sem revelar nem tocar no cofre real |
+| **Kill switch** | Destrói o cofre, a isca e os backups ao digitar uma senha específica; os anexos são apagados quando não resta outro cofre |
+| **Recuperação** | Frase de 12 palavras no estilo BIP39, criptografada separadamente do cofre |
+| **Bloqueio automático** | Tempo configurável, com aviso 30 segundos antes |
+| **Anti-debug** | Detecta depurador (API do Windows / `TracerPid` no Linux) e encerra na hora |
+| **Exclusão segura** | Sobrescreve os arquivos do cofre com bytes aleatórios antes de removê-los |
+| **Limite de tentativas** | Proteção contra força bruta no Rust em todas as operações do cofre |
+| **CSP** | Content Security Policy estrita pela camada de segurança do Tauri |
 
-### Vault
-| Feature | Details |
+### Cofre
+| Funcionalidade | Detalhes |
 |---|---|
-| **Multi-vault** | One independent vault per master password, coexisting on the same machine |
-| **Item types** | Passwords, TOTP seeds, passkeys, credit cards, secure notes, identities |
-| **TOTP** | Built-in authenticator — generates codes in-app (SHA-1/256/512, 6–8 digits, any period); accepts `otpauth://` links and QR code images |
-| **Import** | Bitwarden, Chrome and generic CSV; authenticators from Google Authenticator (transfer QR), Aegis (plain JSON), 2FAS (no password) and `otpauth://` lists |
-| **Secure files** | Attach files up to 50 MB per item, stored as encrypted blobs |
-| **Folders** | Organize items with color-coded folders; files stored per folder |
-| **Trash** | Soft-delete with restore and empty-trash support |
-| **Audit log** | Immutable action log per organization |
-| **Password generator** | Configurable length, charset, strength meter |
-| **Clipboard** | Auto-clears clipboard 10 seconds after copy |
-| **Search** | Instant full-text filter across title, username, URL and tags |
-| **Backups** | Auto-backup at most every 10 minutes to `backups/vault-{id}-{timestamp}.enc`, keeping the 20 most recent per vault |
+| **Vários cofres** | Um cofre independente por senha mestra, coexistindo na mesma máquina |
+| **Tipos de item** | Senhas, sementes TOTP, passkeys, cartões de crédito, notas seguras, identidades |
+| **TOTP** | Autenticador embutido — gera códigos no app (SHA-1/256/512, 6–8 dígitos, qualquer período); aceita links `otpauth://` e imagens de QR code |
+| **Importação** | Bitwarden, Chrome e CSV genérico; autenticadores do Google Authenticator (QR de transferência), Aegis (JSON sem criptografia), 2FAS (sem senha) e listas `otpauth://` |
+| **Arquivos seguros** | Anexos de até 50 MB por item, guardados como blobs criptografados |
+| **Pastas** | Organização em pastas coloridas; arquivos guardados por pasta |
+| **Lixeira** | Exclusão reversível, com restauração e esvaziamento |
+| **Log de auditoria** | Registro imutável de ações por organização |
+| **Gerador de senhas** | Tamanho e conjunto de caracteres configuráveis, medidor de força |
+| **Área de transferência** | Limpa automaticamente 10 segundos depois de copiar |
+| **Busca** | Filtro instantâneo por título, usuário, URL e tags |
+| **Backups** | Backup automático no máximo a cada 10 minutos em `backups/vault-{id}-{timestamp}.enc`, mantendo os 20 mais recentes por cofre |
 
 ### UX
-- Brand identity built on the pin tumbler: brass pins split at a blue shear line; on the login screen the pins shift as you type and align on unlock
-- Dark and light theme with live switching
-- Twelve color palettes in Settings, each in light and dark: LockPin (default: deep petrol and brass), Petróleo, Cofre, Técnico, Monocromático, Alto contraste, AMOLED, Floresta, Oceano, Ametista, Vinho, Terracota
-- Responsive layout: below 720px the sidebar becomes a drawer, list and detail become separate screens, dialogs become bottom sheets
-- Keyboard shortcut navigation (`Ctrl N` new item, `Ctrl F` search, `Ctrl L` lock)
-- Password strength indicator
-- Collapsible sidebar with collection and folder views
+- Identidade visual baseada no cilindro de pinos: pinos de latão divididos numa linha de corte azul; na tela de login, os pinos se movem enquanto você digita e se alinham no desbloqueio
+- Tema escuro e claro, com troca ao vivo
+- Doze paletas de cores em Configurações, cada uma em claro e escuro: LockPin (padrão: petróleo profundo e latão), Petróleo, Cofre, Técnico, Monocromático, Alto contraste, AMOLED, Floresta, Oceano, Ametista, Vinho, Terracota
+- Layout responsivo: abaixo de 720px a barra lateral vira gaveta, lista e detalhe viram telas separadas e os diálogos viram bottom sheets
+- Navegação por atalhos de teclado (`Ctrl N` novo item, `Ctrl F` busca, `Ctrl L` bloquear)
+- Indicador de força da senha
+- Barra lateral recolhível, com visões por coleção e por pasta
 
 ---
 
-## Architecture
+## Arquitetura
 
 ```
 LockPin/
-├── src-tauri/                  # Rust backend (Tauri v2)
-│   ├── src/lib.rs              # Argon2, DPAPI, rate limiter, atomic file I/O, data location
-│   ├── icons/app-icon.svg      # Source of every app icon (npx tauri icon)
-│   └── gen/android/            # Android project (custom MainActivity and manifest)
+├── src-tauri/                  # Backend em Rust (Tauri v2)
+│   ├── src/lib.rs              # Argon2, DPAPI, limite de tentativas, I/O atômico, local dos dados
+│   ├── icons/app-icon.svg      # Origem de todos os ícones do app (npx tauri icon)
+│   └── gen/android/            # Projeto Android (MainActivity e manifest próprios)
 ├── core/
 │   ├── crypto/                 # AES-256-GCM, PBKDF2, HMAC
-│   └── vault/                  # Storage, types, TOTP, import/export, health
-├── apps/desktop/               # Screens: Login, Vault, FolderPane, VaultItemDialog
+│   └── vault/                  # Armazenamento, tipos, TOTP, importação/exportação, saúde
+├── apps/desktop/               # Telas: Login, Vault, FolderPane, VaultItemDialog
 ├── ui/
-│   ├── components/             # Atoms (Logo, TitleBar, Button), molecules, organisms (Modal, Toast)
-│   ├── contexts/               # ThemeContext (theme + palette), useDebounce, useKeyboard
-│   └── design-system/          # global.css (tokens and palettes), tokens.ts
-├── shared/                     # Constants, types, utils
-├── src/main.tsx                # React root, auth state, vault lifecycle
-├── docker/                     # Dockerfile.dev, Dockerfile.portable, LockPin.sh launcher
-├── code/docker-dev.ps1         # Build, test, run, APK and portable builds through Docker
-└── .github/workflows/          # Release pipeline (installers + portable zip)
+│   ├── components/             # Átomos (Logo, TitleBar, Button), moléculas, organismos (Modal, Toast)
+│   ├── contexts/               # ThemeContext (tema + paleta), useDebounce, useKeyboard
+│   └── design-system/          # global.css (tokens e paletas), tokens.ts
+├── shared/                     # Constantes, tipos, utilitários
+├── src/main.tsx                # Raiz React, estado de autenticação, ciclo de vida do cofre
+├── docker/                     # Dockerfile.dev, Dockerfile.portable, launcher LockPin.sh
+├── code/docker-dev.ps1         # Build, testes, execução, APK e build portátil via Docker
+└── .github/workflows/          # Pipeline de release (instaladores + zip portátil)
 ```
 
-### Data flow
+### Fluxo de dados
 
 ```
-User input
+Entrada do usuário
     │
     ▼
-React UI (TypeScript)
+UI React (TypeScript)
     │  invoke()
     ▼
-Tauri IPC bridge
+Ponte IPC do Tauri
     │
     ▼
-Rust commands (lib.rs)
-    │  rate limit → file I/O
+Comandos Rust (lib.rs)
+    │  limite de tentativas → I/O de arquivo
     ▼
-vault-{uuid}.enc  ←→  vaults.auth (multi-line auth registry)
+vault-{uuid}.enc  ←→  vaults.auth (registro de autenticação, uma linha por cofre)
 ```
 
-### Vault file format
+### Formato do arquivo do cofre
 
-Each vault is stored as `vault-{uuid}.enc` — a JSON blob encrypted with AES-256-GCM:
+Cada cofre é guardado como `vault-{uuid}.enc` — um blob JSON criptografado com AES-256-GCM:
 
 ```
-[4 bytes: salt length] [salt] [12 bytes: IV] [ciphertext] [16 bytes: GCM auth tag] [32 bytes: HMAC-SHA256]
+[4 bytes: tamanho do salt] [salt] [12 bytes: IV] [texto cifrado] [16 bytes: tag de autenticação GCM] [32 bytes: HMAC-SHA256]
 ```
 
-Authentication is stored separately in `vaults.auth`:
+A autenticação fica separada, em `vaults.auth`:
 
 ```
 {vault_id}|{master_salt}|{master_hash}|{duress_salt}|{duress_hash}|{kill_salt}|{kill_hash}|{dpapi_blob}|{recovery_blob}
 ```
 
-This separation means the vault file itself contains no credentials — an attacker who obtains only `vault-*.enc` cannot attempt offline dictionary attacks without the corresponding auth entry.
+Com essa separação, o arquivo do cofre não contém nenhuma credencial — quem obtiver só o `vault-*.enc` não consegue tentar ataques de dicionário offline sem a entrada de autenticação correspondente.
 
 ---
 
-## Getting Started
+## Primeiros passos
 
-### Download (recommended)
+### Download (recomendado)
 
-Pre-built installers are available on the [Releases](https://github.com/sdtx-git/LockPin/releases) page.
-No build tools required:
+Instaladores prontos estão na página de [Releases](https://github.com/sdtx-git/LockPin/releases).
+Nenhuma ferramenta de build é necessária:
 
-- **Linux** — `.deb`, `.rpm` or `.AppImage`
-- **Windows** — `.msi` or `.exe` installer
-- **Portable** — `LockPin-portable-<version>.zip` with `LockPin.exe`, `LockPin.AppImage` and `LockPin.sh`; unzip it on a USB drive (see [Portable](#portable-removable-drive-windows--linux))
+- **Linux** — `.deb`, `.rpm` ou `.AppImage`
+- **Windows** — instalador `.msi` ou `.exe`
+- **Portátil** — `LockPin-portable-<versão>.zip` com `LockPin.exe`, `LockPin.AppImage` e `LockPin.sh`; descompacte num pendrive (veja [Portátil](#portátil-pendrive-windows--linux))
 
-The Windows binaries are not code-signed yet. On Windows 11 with **Smart App Control** turned on, they can be blocked; SmartScreen may also ask for confirmation on first run.
+Os binários do Windows ainda não têm assinatura de código. No Windows 11 com o **Controle Inteligente de Aplicativos** ativado, eles podem ser bloqueados; o SmartScreen também pode pedir confirmação na primeira execução.
 
-Android is in progress (debug APK builds through Docker); iOS is planned.
+O Android está em andamento (APK de debug gerado via Docker); o iOS está planejado.
 
-### Data location
+### Local dos dados
 
-| Platform | Path |
+| Plataforma | Caminho |
 |---|---|
-| Linux (AppImage / portable) | `$LOCKPIN_DATA_DIR` if set, otherwise next to the `.AppImage` |
-| Linux (other) | `$XDG_DATA_HOME/lockpin` (default `~/.local/share/lockpin`), directory `0700`, files `0600` |
-| Windows | Next to the executable when that folder is writable or already holds a vault (portable); otherwise `%APPDATA%\LockPin` (installed under `Program Files`) |
+| Linux (AppImage / portátil) | `$LOCKPIN_DATA_DIR`, se definido; senão, ao lado do `.AppImage` |
+| Linux (demais) | `$XDG_DATA_HOME/lockpin` (padrão `~/.local/share/lockpin`), diretório `0700`, arquivos `0600` |
+| Windows | Ao lado do executável, quando a pasta aceita escrita ou já tem um cofre (portátil); senão, `%APPDATA%\LockPin` (instalado em `Program Files`) |
 
-Files are written atomically (temporary file + rename), so removing the drive mid-save keeps the previous version intact.
+Os arquivos são gravados de forma atômica (arquivo temporário + renomeação), então remover o pendrive no meio de um salvamento preserva a versão anterior.
 
-### Portable (removable drive, Windows + Linux)
+### Portátil (pendrive, Windows + Linux)
 
-`code\docker-dev.ps1 portable` builds `build-portable/LockPin/` with `LockPin.exe`, `LockPin.AppImage` and `LockPin.sh`. Copy the folder to the drive: both systems share the same vault in that folder. On Windows run `LockPin.exe`; on Linux run `sh LockPin.sh` (works without FUSE and on drives mounted `noexec`). Windows Hello unlock only works on the PC where it was enabled; elsewhere use the master password.
+`code\docker-dev.ps1 portable` gera `build-portable/LockPin/` com `LockPin.exe`, `LockPin.AppImage` e `LockPin.sh`. Copie a pasta para o pendrive: os dois sistemas usam o mesmo cofre nessa pasta. No Windows, rode `LockPin.exe`; no Linux, rode `sh LockPin.sh` (funciona sem FUSE e em drives montados com `noexec`). O desbloqueio pelo Windows Hello só funciona no PC em que foi ativado; nos demais, use a senha mestra.
 
-### Build from source
+### Build a partir do código
 
-**Prerequisites**
+**Pré-requisitos**
 
 - [Node.js 18+](https://nodejs.org)
 - [Rust 1.80+](https://rustup.rs)
-- [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform
+- [Pré-requisitos do Tauri](https://tauri.app/start/prerequisites/) para a sua plataforma
 
-On Debian/Ubuntu:
+No Debian/Ubuntu:
 
 ```bash
 sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev build-essential file
@@ -188,80 +188,80 @@ npm install
 npm run tauri:build
 ```
 
-The installer is output to `src-tauri/target/release/bundle/`.
+O instalador é gerado em `src-tauri/target/release/bundle/`.
 
 ### CI / Releases
 
-Pushing a tag triggers the GitHub Actions build pipeline, which compiles on clean Linux and Windows runners, publishes the installers to GitHub Releases and assembles the portable zip from both builds:
+Enviar uma tag dispara o pipeline do GitHub Actions, que compila em runners limpos de Linux e Windows, publica os instaladores no GitHub Releases e monta o zip portátil a partir dos dois builds:
 
 ```bash
 git tag v3.0.1
 git push origin v3.0.1
 ```
 
-### Useful scripts
+### Scripts úteis
 
 ```bash
-npm run typecheck     # TypeScript check (no emit)
+npm run typecheck     # Checagem do TypeScript (sem emitir)
 npm run lint          # ESLint
-npm run test          # Vitest unit tests
-cargo check           # Rust type check (run inside src-tauri/)
+npm run test          # Testes unitários com Vitest
+cargo check           # Checagem de tipos do Rust (rodar dentro de src-tauri/)
 ```
 
-### Docker (development on Windows)
+### Docker (desenvolvimento no Windows)
 
-Build, test and run the app without installing Node or Rust on the host. The GUI opens through WSLg.
+Faça build, teste e rode o app sem instalar Node nem Rust na máquina. A interface abre pelo WSLg.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 build   # build the dev image (once)
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 test    # sync code + typecheck, vitest, cargo check, cargo test
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 run     # sync code + tauri dev (window via WSLg)
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 sync    # push edits into the running container (hot reload)
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 shell   # bash inside the container
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 down    # remove the container (volumes are kept)
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 android-init  # regenerate src-tauri/gen/android
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 apk     # debug APK (arm64) into build-android/
-powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 portable  # LockPin.exe + LockPin.AppImage into build-portable/LockPin/
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 build   # gera a imagem de dev (uma vez)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 test    # sincroniza o código + typecheck, vitest, cargo check, cargo test
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 run     # sincroniza o código + tauri dev (janela via WSLg)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 sync    # envia as edições para o container em execução (hot reload)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 shell   # bash dentro do container
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 down    # remove o container (os volumes são mantidos)
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 android-init  # regenera src-tauri/gen/android
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 apk     # APK de debug (arm64) em build-android/
+powershell -ExecutionPolicy Bypass -File code\docker-dev.ps1 portable  # LockPin.exe + LockPin.AppImage em build-portable/LockPin/
 ```
 
-Source code is copied into the container (no bind mount), so run `sync` after editing. Test vault data lives in the `lockpin-data` volume, isolated from the host.
+O código é copiado para o container (sem bind mount), então rode `sync` depois de editar. Os dados do cofre de teste ficam no volume `lockpin-data`, isolados da máquina.
 
 ---
 
-## Security Model
+## Modelo de segurança
 
-LockPin's security rests on three pillars:
+A segurança do LockPin se apoia em três pilares:
 
-**1. Zero server surface** — there is no backend server, no API, no account system. The attack surface is limited to the local filesystem and the Tauri IPC bridge.
+**1. Nenhuma superfície de servidor** — não há servidor de backend, API nem sistema de contas. A superfície de ataque se limita ao sistema de arquivos local e à ponte IPC do Tauri.
 
-**2. Layered key derivation** — unlocking requires both knowing the master password and having access to the local `vaults.auth` file. Neither alone is sufficient.
+**2. Derivação de chave em camadas** — desbloquear exige saber a senha mestra e ter acesso ao arquivo local `vaults.auth`. Nenhum dos dois basta sozinho.
 
-**3. Defense in depth** — even if an attacker bypasses the UI, the Rust layer enforces rate limits, wipes vault files before deletion, detects debugger attachment, and disables crash dumps to prevent memory forensics.
+**3. Defesa em profundidade** — mesmo que um atacante contorne a UI, a camada Rust aplica limites de tentativas, apaga os arquivos do cofre antes de excluí-los, detecta depuradores e desativa crash dumps para impedir análise forense da memória.
 
-### What LockPin does NOT protect against
+### Contra o que o LockPin NÃO protege
 
-- A fully compromised OS (keyloggers, root access)
-- Physical access to an unlocked machine
-- Screen recording attacks
+- Um sistema operacional totalmente comprometido (keyloggers, acesso root)
+- Acesso físico a uma máquina desbloqueada
+- Ataques por gravação de tela
 
 ---
 
 ## Roadmap
 
-- [x] Linux support
-- [x] Portable mode (one USB folder for Windows and Linux)
-- [ ] Android (mobile layout done; release build pending)
-- [ ] Sync between desktop and phone over the local network, end-to-end encrypted, no cloud
-- [ ] Code-signed Windows builds
-- [ ] macOS support
-- [ ] Biometric unlock on Linux
-- [ ] Browser extension (autofill)
-- [ ] Encrypted export / import (Bitwarden-compatible format)
-- [ ] Password sharing via encrypted QR code
-- [ ] YubiKey as second factor
+- [x] Suporte a Linux
+- [x] Modo portátil (uma pasta no pendrive para Windows e Linux)
+- [ ] Android (layout mobile pronto; build de release pendente)
+- [ ] Sincronização entre desktop e celular pela rede local, com criptografia ponta a ponta, sem nuvem
+- [ ] Builds do Windows com assinatura de código
+- [ ] Suporte a macOS
+- [ ] Desbloqueio biométrico no Linux
+- [ ] Extensão de navegador (preenchimento automático)
+- [ ] Exportação / importação criptografada (formato compatível com Bitwarden)
+- [ ] Compartilhamento de senhas por QR code criptografado
+- [ ] YubiKey como segundo fator
 
 ---
 
-## License
+## Licença
 
-MIT © 2025 — see [LICENSE](LICENSE) for details.
+MIT © 2025 — veja [LICENSE](LICENSE) para mais detalhes.
