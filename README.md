@@ -80,6 +80,28 @@ A maioria dos gerenciadores de senhas guarda seus dados na nuvem deles e cobra u
 
 ## Arquitetura
 
+```mermaid
+flowchart LR
+    subgraph Interface
+        U[UI React<br/>login, cofre, pastas, diálogos de item]
+    end
+    U --> K[core/crypto<br/>AES-256-GCM, PBKDF2, HMAC<br/>Web Crypto]
+    U --> V[core/vault<br/>tipos, TOTP, importação, saúde]
+    K -->|argon2_derive_key| R
+    U -->|invoke, só texto cifrado| R[Comandos Rust lib.rs<br/>limite de tentativas, I/O atômico, anti-debug]
+    R --- F[("vault-{uuid}.enc<br/>cofre criptografado")]
+    R --- A[("vaults.auth<br/>salts, hashes,<br/>blobs DPAPI e de recuperação")]
+    R --- T[(Anexos<br/>blobs criptografados)]
+    R -.->|backup automático, no máximo a cada 10 min| B[(backups/<br/>20 mais recentes por cofre)]
+    R -->|dpapi_protect, Windows Hello| W[DPAPI do Windows<br/>desbloqueio por biometria/PIN]
+```
+
+- **Frontend:** criptografa e descriptografa no webview com Web Crypto; só a derivação Argon2id roda no Rust (`argon2_derive_key`).
+- **Camada Rust:** recebe e grava apenas texto cifrado, aplicando limite de tentativas, escrita atômica e exclusão segura.
+- **Armazenamento:** o cofre e suas credenciais ficam em arquivos separados, então o `vault-*.enc` sozinho não permite ataques offline.
+
+### Estrutura do repositório
+
 ```
 LockPin/
 ├── src-tauri/                  # Backend em Rust (Tauri v2)
@@ -99,24 +121,6 @@ LockPin/
 ├── docker/                     # Dockerfile.dev, Dockerfile.portable, launcher LockPin.sh
 ├── code/docker-dev.ps1         # Build, testes, execução, APK e build portátil via Docker
 └── .github/workflows/          # Pipeline de release (instaladores + zip portátil)
-```
-
-### Fluxo de dados
-
-```
-Entrada do usuário
-    │
-    ▼
-UI React (TypeScript)
-    │  invoke()
-    ▼
-Ponte IPC do Tauri
-    │
-    ▼
-Comandos Rust (lib.rs)
-    │  limite de tentativas → I/O de arquivo
-    ▼
-vault-{uuid}.enc  ←→  vaults.auth (registro de autenticação, uma linha por cofre)
 ```
 
 ### Formato do arquivo do cofre

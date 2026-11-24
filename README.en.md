@@ -80,6 +80,28 @@ Most password managers store your data in their cloud and charge a monthly fee f
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    subgraph Interface
+        U[React UI<br/>login, vault, folders, item dialogs]
+    end
+    U --> K[core/crypto<br/>AES-256-GCM, PBKDF2, HMAC<br/>Web Crypto]
+    U --> V[core/vault<br/>types, TOTP, import, health]
+    K -->|argon2_derive_key| R
+    U -->|invoke, ciphertext only| R[Rust commands lib.rs<br/>rate limit, atomic I/O, anti-debug]
+    R --- F[("vault-{uuid}.enc<br/>encrypted vault")]
+    R --- A[("vaults.auth<br/>salts, hashes,<br/>DPAPI and recovery blobs")]
+    R --- T[(Attachments<br/>encrypted blobs)]
+    R -.->|auto-backup, at most every 10 min| B[(backups/<br/>20 most recent per vault)]
+    R -->|dpapi_protect, Windows Hello| W[Windows DPAPI<br/>biometric/PIN unlock]
+```
+
+- **Frontend:** encrypts and decrypts in the webview with Web Crypto; only the Argon2id derivation runs in Rust (`argon2_derive_key`).
+- **Rust layer:** receives and stores ciphertext only, applying rate limits, atomic writes and secure delete.
+- **Storage:** the vault and its credentials live in separate files, so `vault-*.enc` alone does not allow offline attacks.
+
+### Repository layout
+
 ```
 LockPin/
 ├── src-tauri/                  # Rust backend (Tauri v2)
@@ -99,24 +121,6 @@ LockPin/
 ├── docker/                     # Dockerfile.dev, Dockerfile.portable, LockPin.sh launcher
 ├── code/docker-dev.ps1         # Build, test, run, APK and portable builds through Docker
 └── .github/workflows/          # Release pipeline (installers + portable zip)
-```
-
-### Data flow
-
-```
-User input
-    │
-    ▼
-React UI (TypeScript)
-    │  invoke()
-    ▼
-Tauri IPC bridge
-    │
-    ▼
-Rust commands (lib.rs)
-    │  rate limit → file I/O
-    ▼
-vault-{uuid}.enc  ←→  vaults.auth (multi-line auth registry)
 ```
 
 ### Vault file format
